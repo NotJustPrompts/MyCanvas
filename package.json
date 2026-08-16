@@ -1,0 +1,32 @@
+{
+  "name": "mycanva",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A local-first thumbnail designer: text, effects, shapes and images over a canvas, exported to PNG/JPG.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "trap 'kill 0' EXIT; npm run dev:server & npm run dev:web & wait",
+    "dev:server": "npm run dev --workspace @mycanva/server",
+    "dev:web": "npm run dev --workspace @mycanva/web",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "npm run lint -- --fix",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run lint && npm run typecheck",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "eslint": "^9.39.4",
+    "globals": "^17.7.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
+  }
+}

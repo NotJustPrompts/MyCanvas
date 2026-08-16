@@ -1,0 +1,27 @@
+{
+  "name": "@mycanva/web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mycanva/shared": "*",
+    "konva": "^10.3.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-konva": "^19.2.4",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3"
+  }
+}
