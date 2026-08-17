@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
+import { Brand } from "../components/Brand";
 import { CanvasStage } from "../components/CanvasStage";
+import { ContextBar } from "../components/ContextBar";
+import { ContextMenu } from "../components/ContextMenu";
 import { ExportDialog } from "../components/ExportDialog";
 import { Inspector } from "../components/Inspector";
 import { LayersPanel } from "../components/LayersPanel";
 import { LeftToolbar } from "../components/LeftToolbar";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { useEditorStore } from "../store/editorStore";
 import { makeDesignThumbnail } from "../utils/canvas-bridge";
-
-const ZOOM_STEP = 1.25;
 
 export function Editor({ designId }: { designId: string }) {
   const design = useEditorStore((state) => state.design);
   const loadStatus = useEditorStore((state) => state.loadStatus);
   const saveStatus = useEditorStore((state) => state.saveStatus);
   const setName = useEditorStore((state) => state.setName);
+  const toast = useEditorStore((state) => state.toast);
 
   const [fitScale, setFitScale] = useState(1);
   const [zoom, setZoom] = useState<number | null>(null);
@@ -34,17 +37,21 @@ export function Editor({ designId }: { designId: string }) {
     setFitScale((prev) => (Math.abs(prev - fit) < 0.001 ? prev : fit));
   }, []);
 
-  // Keyboard shortcuts: undo/redo, delete, arrow-key nudge.
+  // Keyboard shortcuts: undo/redo, copy/paste, delete, arrow-key nudge.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const state = useEditorStore.getState();
       const target = e.target;
+      // Only text-entry controls should swallow shortcuts. Sliders, checkboxes,
+      // color inputs and buttons may keep focus after a click and must not
+      // silently disable copy/paste while a layer is selected.
       const inField =
         target instanceof HTMLElement &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
+        (target.tagName === "TEXTAREA" ||
           target.tagName === "SELECT" ||
-          target.isContentEditable);
+          target.isContentEditable ||
+          (target instanceof HTMLInputElement &&
+            !["range", "checkbox", "radio", "color", "button"].includes(target.type)));
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -58,40 +65,87 @@ export function Editor({ designId }: { designId: string }) {
       if (inField || !state.design) {
         return;
       }
-      if (mod && e.key.toLowerCase() === "c" && state.selectedLayerId) {
+      const hasSelection = state.selectedLayerIds.length > 0;
+      if (mod && e.key.toLowerCase() === "c" && hasSelection) {
         e.preventDefault();
-        state.copyLayer(state.selectedLayerId);
+        state.copySelectedLayers();
         return;
       }
       if (mod && e.key.toLowerCase() === "v") {
         e.preventDefault();
-        state.pasteLayer();
+        state.pasteLayers();
         return;
       }
-      const selectedId = state.selectedLayerId;
-      if (!selectedId) {
+      if (mod && e.key.toLowerCase() === "d" && hasSelection) {
+        e.preventDefault();
+        state.duplicateSelectedLayers();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "g" && hasSelection) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          state.ungroupSelection();
+        } else {
+          state.groupSelection();
+        }
+        return;
+      }
+      if (e.key === "Escape" && state.editingGroupId) {
+        // Leave the entered group: back to group-level selection.
+        const groupId = state.editingGroupId;
+        state.setEditingGroup(null);
+        state.setSelectedLayers(
+          state.design.layers.filter((entry) => entry.groupId === groupId).map((entry) => entry.id),
+        );
+        return;
+      }
+      if (!hasSelection) {
         return;
       }
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        state.removeLayer(selectedId);
+        state.removeSelectedLayers();
+        return;
+      }
+      const primaryId = state.selectedLayerIds[state.selectedLayerIds.length - 1];
+      if (e.key === "Enter") {
+        const layer = state.design.layers.find((entry) => entry.id === primaryId);
+        if (state.selectedLayerIds.length === 1 && layer?.type === "text") {
+          e.preventDefault();
+          state.setEditingTextLayer(primaryId ?? null);
+        }
         return;
       }
       if (e.key.startsWith("Arrow")) {
-        const layer = state.design.layers.find((entry) => entry.id === selectedId);
-        if (!layer) {
-          return;
-        }
         e.preventDefault();
         const step = e.shiftKey ? 10 : 1;
         const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
         const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
-        state.updateLayer(selectedId, { x: layer.x + dx, y: layer.y + dy });
+        state.updateLayers(
+          state.selectedLayerIds.flatMap((id) => {
+            const layer = state.design?.layers.find((entry) => entry.id === id);
+            return layer ? [{ id, patch: { x: layer.x + dx, y: layer.y + dy } }] : [];
+          }),
+        );
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  // Prevent the browser's default "open the file" navigation when files are
+  // dropped anywhere on the editor outside the canvas drop zone.
+  useEffect(() => {
+    const prevent = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
     };
   }, []);
 
@@ -161,9 +215,8 @@ export function Editor({ designId }: { designId: string }) {
   return (
     <div className="editor">
       <header className="editor-top">
-        <a className="back-link" href="#/">
-          ← Projects
-        </a>
+        <Brand />
+        <span className="top-bar-divider" aria-hidden="true" />
         <input
           className="design-name"
           value={design.name}
@@ -171,42 +224,12 @@ export function Editor({ designId }: { designId: string }) {
             setName(e.target.value);
           }}
         />
-        <span className={`save-status ${saveStatus}`}>{saveLabel}</span>
-        <div className="zoom-controls">
-          <button
-            type="button"
-            className="icon-button"
-            title="Zoom out"
-            onClick={() => {
-              setZoom(Math.max(0.05, effectiveScale / ZOOM_STEP));
-            }}
-          >
-            −
-          </button>
-          <span className="zoom-value">
-            {zoomPercent}
-            %
-          </span>
-          <button
-            type="button"
-            className="icon-button"
-            title="Zoom in"
-            onClick={() => {
-              setZoom(Math.min(4, effectiveScale * ZOOM_STEP));
-            }}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => {
-              setZoom(null);
-            }}
-          >
-            Fit
-          </button>
-        </div>
+        <span className={`save-pill ${saveStatus}`}>
+          <span className="save-dot" aria-hidden="true" />
+          {saveLabel}
+        </span>
+        <span className="top-bar-spacer" />
+        <ThemeToggle />
         <button
           type="button"
           className="primary"
@@ -220,7 +243,37 @@ export function Editor({ designId }: { designId: string }) {
       <div className="editor-main">
         <LeftToolbar />
         <main className="editor-center">
-          <CanvasStage design={design} scale={effectiveScale} onFitScale={handleFitScale} />
+          <ContextBar />
+          <div className="canvas-wrap">
+            <CanvasStage design={design} scale={effectiveScale} onFitScale={handleFitScale} />
+          </div>
+          <div className="editor-bottom">
+            <input
+              type="range"
+              className="zoom-slider"
+              min={0.05}
+              max={2}
+              step={0.05}
+              value={Math.min(2, Math.max(0.05, effectiveScale))}
+              onChange={(e) => {
+                setZoom(Number(e.target.value));
+              }}
+              title="Zoom"
+            />
+            <span className="zoom-value">
+              {zoomPercent}
+              %
+            </span>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setZoom(null);
+              }}
+            >
+              Fit
+            </button>
+          </div>
         </main>
         <aside className="editor-right">
           <LayersPanel />
@@ -233,6 +286,12 @@ export function Editor({ designId }: { designId: string }) {
             setShowExport(false);
           }}
         />
+      )}
+      <ContextMenu />
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
       )}
     </div>
   );

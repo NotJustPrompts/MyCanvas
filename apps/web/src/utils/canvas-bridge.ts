@@ -1,3 +1,5 @@
+import type Konva from "konva";
+
 export interface ExportImageOptions {
   mimeType: "image/png" | "image/jpeg";
   quality: number;
@@ -9,6 +11,7 @@ export interface ExportImageOptions {
 interface CanvasBridge {
   exportImage: (options: ExportImageOptions) => string;
   makeThumbnail: () => string | null;
+  getLayerNode: (id: string) => Konva.Node | null;
 }
 
 let bridge: CanvasBridge | null = null;
@@ -27,4 +30,9 @@ export function exportDesignImage(options: ExportImageOptions): string {
 
 export function makeDesignThumbnail(): string | null {
   return bridge ? bridge.makeThumbnail() : null;
+}
+
+/** Live Konva node for a layer id (for rendered-bounds math like alignment). */
+export function getLayerNode(id: string): Konva.Node | null {
+  return bridge ? bridge.getLayerNode(id) : null;
 }

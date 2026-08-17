@@ -24,6 +24,33 @@ interface LayerBase {
   rotation: number;
   opacity: number;
   visible: boolean;
+  /** Group membership; layers sharing a groupId form a contiguous run. */
+  groupId?: string;
+}
+
+/** Mutually-exclusive text effects (Canva model: one effect or none). */
+export type TextEffect =
+  | { type: "none" }
+  | { type: "shadow"; color: string; distance: number; angle: number; blur: number; opacity: number }
+  | { type: "outline"; color: string; thickness: number }
+  | { type: "echo"; color: string; distance: number; angle: number }
+  | { type: "background"; color: string; spread: number; roundness: number; opacity: number }
+  | { type: "glitch"; colorPair: "cyan-magenta" | "red-blue"; distance: number; angle: number };
+
+/** Curated defaults that look good on a 1280×720 thumbnail. */
+export function defaultTextEffect(type: Exclude<TextEffect["type"], "none">): TextEffect {
+  switch (type) {
+    case "shadow":
+      return { type: "shadow", color: "#000000", distance: 8, angle: 45, blur: 12, opacity: 0.6 };
+    case "outline":
+      return { type: "outline", color: "#ffffff", thickness: 4 };
+    case "echo":
+      return { type: "echo", color: "#6b6b76", distance: 6, angle: 45 };
+    case "background":
+      return { type: "background", color: "#ffe600", spread: 12, roundness: 40, opacity: 1 };
+    case "glitch":
+      return { type: "glitch", colorPair: "cyan-magenta", distance: 6, angle: 0 };
+  }
 }
 
 export interface TextLayer extends LayerBase {
@@ -37,10 +64,22 @@ export interface TextLayer extends LayerBase {
   align: "left" | "center" | "right";
   lineHeight: number;
   letterSpacing: number;
-  /** Fixed wrap width in px; 0 means auto (no wrapping). */
+  /** Fixed wrap width in px; 0 means auto (no wrapping). Ignored while curved. */
   wrapWidth: number;
+  /** Bend amount, -100 (smile) … 100 (arch); 0/absent = straight. Curved text is single-line. */
+  curve?: number;
+  /** The single active text effect; absent on legacy layers (migrated on load). */
+  effect?: TextEffect;
+  /** Legacy storage for the shadow/outline effect params; kept in sync by migration. */
   shadow: ShadowEffect;
   stroke: StrokeEffect;
+}
+
+export interface ImageCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface ImageLayer extends LayerBase {
@@ -49,6 +88,8 @@ export interface ImageLayer extends LayerBase {
   asset: string;
   width: number;
   height: number;
+  /** Source-space crop rect (px in the original image). Absent = full image. */
+  crop?: ImageCrop;
   shadow: ShadowEffect;
 }
 
@@ -71,7 +112,19 @@ export interface LineLayer extends LayerBase {
   shadow: ShadowEffect;
 }
 
-export type Layer = TextLayer | ImageLayer | RectLayer | LineLayer;
+export type ShapeKind = "triangle" | "hexagon" | "circle" | "semicircle" | "star";
+
+export interface ShapeLayer extends LayerBase {
+  type: "shape";
+  shape: ShapeKind;
+  width: number;
+  height: number;
+  fill: string;
+  stroke: StrokeEffect;
+  shadow: ShadowEffect;
+}
+
+export type Layer = TextLayer | ImageLayer | RectLayer | LineLayer | ShapeLayer;
 export type LayerType = Layer["type"];
 
 export interface Design {

@@ -33,37 +33,85 @@ export interface EditorStore {
   design: Design | null;
   loadStatus: LoadStatus;
   saveStatus: SaveStatus;
-  selectedLayerId: string | null;
+  /** Selection set in click order; the last entry is the "primary" layer. */
+  selectedLayerIds: string[];
+  /** Group currently entered for isolated member editing (double-click). */
+  editingGroupId: string | null;
   past: Snapshot[];
   future: Snapshot[];
   pendingSnapshot: Snapshot | null;
 
   loadDesign: (id: string) => Promise<void>;
   unload: () => void;
+  /** Replace the selection (group-aware: a member selects its whole group). */
   selectLayer: (id: string | null) => void;
+  /** Shift-click toggle (group-aware). */
+  toggleSelectLayer: (id: string) => void;
+  setSelectedLayers: (ids: string[]) => void;
+  setEditingGroup: (id: string | null) => void;
   setName: (name: string) => void;
   setBackground: (background: string, transient?: boolean) => void;
   addLayer: (layer: Layer) => void;
   addImageLayer: (asset: string, naturalWidth: number, naturalHeight: number) => void;
+  addImageLayerAt: (
+    asset: string,
+    naturalWidth: number,
+    naturalHeight: number,
+    centerX: number,
+    centerY: number,
+  ) => void;
+  /** Incremented whenever an asset is uploaded so the Uploads panel refetches. */
+  assetsVersion: number;
+  bumpAssetsVersion: () => void;
+  /** Text layer currently being edited in place (textarea overlay). */
+  editingTextLayerId: string | null;
+  setEditingTextLayer: (id: string | null) => void;
+  /** Open right-click menu (client coords + target layer). */
+  contextMenu: { x: number; y: number; layerId: string } | null;
+  openContextMenu: (menu: { x: number; y: number; layerId: string }) => void;
+  closeContextMenu: () => void;
+  /** Active background-removal job: download progress (0–1) or null = inference. */
+  bgRemoval: { layerId: string; progress: number | null } | null;
+  setBgRemoval: (value: { layerId: string; progress: number | null } | null) => void;
+  /** Minimal transient toast message. */
+  toast: string | null;
+  showToast: (message: string) => void;
+  /** Extracted photo palettes, keyed by asset+crop (see utils/photo-colors). */
+  photoPalettes: Record<string, string[]>;
+  setPhotoPalette: (key: string, colors: string[]) => void;
   updateLayer: (id: string, patch: LayerPatch, transient?: boolean) => void;
+  /** Multi-layer patch, one history entry (group drag/transform write-back). */
+  updateLayers: (entries: { id: string; patch: LayerPatch }[]) => void;
   commitTransient: () => void;
   removeLayer: (id: string) => void;
+  removeSelectedLayers: () => void;
   duplicateLayer: (id: string) => void;
+  duplicateSelectedLayers: () => void;
   copyLayer: (id: string) => void;
-  pasteLayer: () => void;
+  copySelectedLayers: () => void;
+  pasteLayers: () => void;
   moveLayer: (id: string, direction: 1 | -1) => void;
+  moveSelectedLayers: (direction: 1 | -1) => void;
+  groupSelection: () => void;
+  ungroupSelection: () => void;
   undo: () => void;
   redo: () => void;
   saveNow: () => Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** In-app layer clipboard (shared across designs within the session). */
-let layerClipboard: Layer | null = null;
+/** In-app layer clipboard (z-order preserved; shared across designs). */
+let layerClipboard: Layer[] = [];
 
 export function newLayerId(): string {
   return crypto.randomUUID();
+}
+
+/** The primary layer of a selection set (last clicked), or null. */
+export function primarySelectedId(state: { selectedLayerIds: string[] }): string | null {
+  return state.selectedLayerIds[state.selectedLayerIds.length - 1] ?? null;
 }
 
 export const useEditorStore = create<EditorStore>()((set, get) => {
@@ -124,7 +172,8 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
     design: null,
     loadStatus: "loading",
     saveStatus: "saved",
-    selectedLayerId: null,
+    selectedLayerIds: [],
+    editingGroupId: null,
     past: [],
     future: [],
     pendingSnapshot: null,
@@ -138,13 +187,42 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
         design: null,
         loadStatus: "loading",
         saveStatus: "saved",
-        selectedLayerId: null,
+        selectedLayerIds: [],
+        editingGroupId: null,
         past: [],
         future: [],
         pendingSnapshot: null,
+        editingTextLayerId: null,
+        contextMenu: null,
       });
       try {
         const design = await api.getDesign(id);
+        // Migrate legacy per-field shadow/stroke toggles on text layers to the
+        // mutually-exclusive effect model (one effect or none).
+        design.layers = design.layers.map((layer) => {
+          if (layer.type !== "text" || layer.effect) {
+            return layer;
+          }
+          if (layer.shadow.enabled) {
+            const distance = Math.round(Math.hypot(layer.shadow.offsetX, layer.shadow.offsetY));
+            const angle = Math.round((Math.atan2(layer.shadow.offsetY, layer.shadow.offsetX) * 180) / Math.PI);
+            return {
+              ...layer,
+              effect: {
+                type: "shadow",
+                color: layer.shadow.color,
+                distance,
+                angle,
+                blur: layer.shadow.blur,
+                opacity: layer.shadow.opacity,
+              },
+            };
+          }
+          if (layer.stroke.enabled) {
+            return { ...layer, effect: { type: "outline", color: layer.stroke.color, thickness: layer.stroke.width } };
+          }
+          return { ...layer, effect: { type: "none" } };
+        });
         set({ design, loadStatus: "ready" });
         const families = design.layers
           .filter((layer): layer is TextLayer => layer.type === "text")
@@ -168,15 +246,63 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
         design: null,
         loadStatus: "loading",
         saveStatus: "saved",
-        selectedLayerId: null,
+        selectedLayerIds: [],
+        editingGroupId: null,
         past: [],
         future: [],
         pendingSnapshot: null,
+        editingTextLayerId: null,
       });
     },
 
     selectLayer: (id) => {
-      set({ selectedLayerId: id });
+      if (!id) {
+        set({ selectedLayerIds: [], editingGroupId: null });
+        return;
+      }
+      const design = get().design;
+      const layer = design?.layers.find((entry) => entry.id === id);
+      if (design && layer?.groupId) {
+        if (layer.groupId === get().editingGroupId) {
+          // Inside an entered group: select just the member.
+          set({ selectedLayerIds: [id] });
+          return;
+        }
+        // A member of a (non-entered) group selects the whole group.
+        set({
+          editingGroupId: null,
+          selectedLayerIds: design.layers.filter((entry) => entry.groupId === layer.groupId).map((entry) => entry.id),
+        });
+        return;
+      }
+      set({ editingGroupId: null, selectedLayerIds: [id] });
+    },
+
+    toggleSelectLayer: (id) => {
+      const design = get().design;
+      const layer = design?.layers.find((entry) => entry.id === id);
+      if (!design || !layer) {
+        return;
+      }
+      const memberIds =
+        layer.groupId && layer.groupId !== get().editingGroupId
+          ? design.layers.filter((entry) => entry.groupId === layer.groupId).map((entry) => entry.id)
+          : [id];
+      const current = get().selectedLayerIds;
+      const allSelected = memberIds.every((memberId) => current.includes(memberId));
+      if (allSelected) {
+        set({ selectedLayerIds: current.filter((memberId) => !memberIds.includes(memberId)) });
+      } else {
+        set({ selectedLayerIds: [...current.filter((memberId) => !memberIds.includes(memberId)), ...memberIds] });
+      }
+    },
+
+    setSelectedLayers: (ids) => {
+      set({ selectedLayerIds: ids });
+    },
+
+    setEditingGroup: (id) => {
+      set({ editingGroupId: id });
     },
 
     setName: (name) => {
@@ -194,7 +320,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
 
     addLayer: (layer) => {
       mutate((design) => ({ layers: [...design.layers, layer] }), false);
-      set({ selectedLayerId: layer.id });
+      set({ selectedLayerIds: [layer.id] });
     },
 
     addImageLayer: (asset, naturalWidth, naturalHeight) => {
@@ -202,15 +328,31 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       if (!design) {
         return;
       }
+      get().addImageLayerAt(asset, naturalWidth, naturalHeight, design.width / 2, design.height / 2);
+    },
+
+    addImageLayerAt: (asset, naturalWidth, naturalHeight, centerX, centerY) => {
+      const design = get().design;
+      if (!design) {
+        return;
+      }
       const fit = Math.min(1, design.width / naturalWidth, design.height / naturalHeight);
       const width = Math.max(1, Math.round(naturalWidth * fit));
       const height = Math.max(1, Math.round(naturalHeight * fit));
+      // Sequential names: next free image_N across the design, case-insensitive.
+      let maxIndex = 0;
+      for (const existing of design.layers) {
+        const match = /^image_(\d+)$/i.exec(existing.name);
+        if (match?.[1]) {
+          maxIndex = Math.max(maxIndex, Number(match[1]));
+        }
+      }
       const layer: ImageLayer = {
         id: newLayerId(),
         type: "image",
-        name: asset,
-        x: Math.round((design.width - width) / 2),
-        y: Math.round((design.height - height) / 2),
+        name: `image_${String(maxIndex + 1)}`,
+        x: Math.round(centerX - width / 2),
+        y: Math.round(centerY - height / 2),
         scaleX: 1,
         scaleY: 1,
         rotation: 0,
@@ -224,12 +366,71 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       get().addLayer(layer);
     },
 
+    assetsVersion: 0,
+
+    bumpAssetsVersion: () => {
+      set((state) => ({ assetsVersion: state.assetsVersion + 1 }));
+    },
+
+    editingTextLayerId: null,
+
+    setEditingTextLayer: (id) => {
+      set({ editingTextLayerId: id });
+    },
+
+    contextMenu: null,
+
+    openContextMenu: (menu) => {
+      set({ contextMenu: menu });
+    },
+
+    closeContextMenu: () => {
+      set({ contextMenu: null });
+    },
+
+    bgRemoval: null,
+
+    setBgRemoval: (value) => {
+      set({ bgRemoval: value });
+    },
+
+    toast: null,
+
+    showToast: (message) => {
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+      }
+      set({ toast: message });
+      toastTimer = setTimeout(() => {
+        set({ toast: null });
+      }, 4000);
+    },
+
+    photoPalettes: {},
+
+    setPhotoPalette: (key, colors) => {
+      set((state) => ({ photoPalettes: { ...state.photoPalettes, [key]: colors } }));
+    },
+
     updateLayer: (id, patch, transient = false) => {
       mutate(
         (design) => ({
           layers: design.layers.map((layer) => (layer.id === id ? ({ ...layer, ...patch }) : layer)),
         }),
         transient,
+      );
+    },
+
+    updateLayers: (entries) => {
+      const patches = new Map(entries.map((entry) => [entry.id, entry.patch]));
+      mutate(
+        (design) => ({
+          layers: design.layers.map((layer) => {
+            const patch = patches.get(layer.id);
+            return patch ? ({ ...layer, ...patch }) : layer;
+          }),
+        }),
+        false,
       );
     },
 
@@ -247,76 +448,177 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
 
     removeLayer: (id) => {
       mutate((design) => ({ layers: design.layers.filter((layer) => layer.id !== id) }), false);
-      if (get().selectedLayerId === id) {
-        set({ selectedLayerId: null });
+      set((state) => ({ selectedLayerIds: state.selectedLayerIds.filter((entry) => entry !== id) }));
+    },
+
+    removeSelectedLayers: () => {
+      const ids = get().selectedLayerIds;
+      if (ids.length === 0) {
+        return;
       }
+      mutate((design) => ({ layers: design.layers.filter((layer) => !ids.includes(layer.id)) }), false);
+      set({ selectedLayerIds: [] });
     },
 
     duplicateLayer: (id) => {
+      set({ selectedLayerIds: [id] });
+      get().duplicateSelectedLayers();
+    },
+
+    duplicateSelectedLayers: () => {
       const design = get().design;
-      if (!design) {
+      const ids = get().selectedLayerIds;
+      if (!design || ids.length === 0) {
         return;
       }
-      const index = design.layers.findIndex((layer) => layer.id === id);
-      const source = design.layers[index];
-      if (!source) {
-        return;
-      }
-      const copy: Layer = {
-        ...structuredClone(source),
-        id: newLayerId(),
-        name: `${source.name} copy`,
-        x: source.x + 12,
-        y: source.y + 12,
-      };
-      const layers = [...design.layers];
-      layers.splice(index + 1, 0, copy);
-      mutate(() => ({ layers }), false);
-      set({ selectedLayerId: copy.id });
+      const selected = design.layers.filter((layer) => ids.includes(layer.id));
+      const groupMap = new Map<string, string>();
+      const clones = selected.map((layer) => {
+        const clone: Layer = {
+          ...structuredClone(layer),
+          id: newLayerId(),
+          name: `${layer.name} copy`,
+          x: layer.x + 12,
+          y: layer.y + 12,
+        };
+        if (clone.groupId) {
+          let mapped = groupMap.get(clone.groupId);
+          if (!mapped) {
+            mapped = newLayerId();
+            groupMap.set(clone.groupId, mapped);
+          }
+          clone.groupId = mapped;
+        }
+        return clone;
+      });
+      mutate((current) => ({ layers: [...current.layers, ...clones] }), false);
+      set({ selectedLayerIds: clones.map((clone) => clone.id) });
     },
 
     copyLayer: (id) => {
-      const design = get().design;
-      const source = design?.layers.find((layer) => layer.id === id);
-      if (!source) {
-        return;
-      }
-      layerClipboard = structuredClone(source);
+      set({ selectedLayerIds: [id] });
+      get().copySelectedLayers();
     },
 
-    pasteLayer: () => {
+    copySelectedLayers: () => {
       const design = get().design;
-      if (!design || !layerClipboard) {
+      const ids = get().selectedLayerIds;
+      if (!design || ids.length === 0) {
         return;
       }
-      const copy: Layer = {
-        ...structuredClone(layerClipboard),
-        id: newLayerId(),
-        name: `${layerClipboard.name} copy`,
-        x: layerClipboard.x + 16,
-        y: layerClipboard.y + 16,
-      };
-      mutate((current) => ({ layers: [...current.layers, copy] }), false);
-      set({ selectedLayerId: copy.id });
+      layerClipboard = structuredClone(design.layers.filter((layer) => ids.includes(layer.id)));
+    },
+
+    pasteLayers: () => {
+      const design = get().design;
+      if (!design || layerClipboard.length === 0) {
+        return;
+      }
+      const groupMap = new Map<string, string>();
+      const clones = layerClipboard.map((layer) => {
+        const clone: Layer = {
+          ...structuredClone(layer),
+          id: newLayerId(),
+          name: `${layer.name} copy`,
+          x: layer.x + 16,
+          y: layer.y + 16,
+        };
+        if (clone.groupId) {
+          let mapped = groupMap.get(clone.groupId);
+          if (!mapped) {
+            mapped = newLayerId();
+            groupMap.set(clone.groupId, mapped);
+          }
+          clone.groupId = mapped;
+        }
+        return clone;
+      });
+      mutate((current) => ({ layers: [...current.layers, ...clones] }), false);
+      set({ selectedLayerIds: clones.map((clone) => clone.id) });
     },
 
     moveLayer: (id, direction) => {
+      set({ selectedLayerIds: [id] });
+      get().moveSelectedLayers(direction);
+    },
+
+    moveSelectedLayers: (direction) => {
+      const ids = new Set(get().selectedLayerIds);
+      if (ids.size === 0) {
+        return;
+      }
       mutate((design) => {
-        const index = design.layers.findIndex((layer) => layer.id === id);
-        const target = index + direction;
-        if (index < 0 || target < 0 || target >= design.layers.length) {
-          return { layers: design.layers };
-        }
         const layers = [...design.layers];
-        const a = layers[index];
-        const b = layers[target];
-        if (!a || !b) {
-          return { layers: design.layers };
+        if (direction === 1) {
+          for (let i = layers.length - 2; i >= 0; i -= 1) {
+            const current = layers[i];
+            const above = layers[i + 1];
+            if (current && above && ids.has(current.id) && !ids.has(above.id)) {
+              layers[i] = above;
+              layers[i + 1] = current;
+            }
+          }
+        } else {
+          for (let i = 1; i < layers.length; i += 1) {
+            const current = layers[i];
+            const below = layers[i - 1];
+            if (current && below && ids.has(current.id) && !ids.has(below.id)) {
+              layers[i] = below;
+              layers[i - 1] = current;
+            }
+          }
         }
-        layers[index] = b;
-        layers[target] = a;
         return { layers };
       }, false);
+    },
+
+    groupSelection: () => {
+      const design = get().design;
+      const ids = get().selectedLayerIds;
+      if (!design || ids.length < 2) {
+        return;
+      }
+      const groupId = newLayerId();
+      mutate((current) => {
+        const memberIndices = current.layers
+          .map((layer, index) => (ids.includes(layer.id) ? index : -1))
+          .filter((index) => index >= 0);
+        if (memberIndices.length < 2) {
+          return { layers: current.layers };
+        }
+        const members = memberIndices
+          .map((index) => current.layers[index])
+          .filter((layer): layer is Layer => Boolean(layer))
+          .map((layer) => ({ ...layer, groupId }));
+        const nonMembers = current.layers.filter((layer) => !ids.includes(layer.id));
+        const topIndex = memberIndices[memberIndices.length - 1] ?? 0;
+        const insertAt = Math.max(0, topIndex - (memberIndices.length - 1));
+        return {
+          layers: [...nonMembers.slice(0, insertAt), ...members, ...nonMembers.slice(insertAt)],
+        };
+      }, false);
+    },
+
+    ungroupSelection: () => {
+      const design = get().design;
+      const ids = get().selectedLayerIds;
+      if (!design || ids.length === 0) {
+        return;
+      }
+      const groupIds = new Set(
+        design.layers.filter((layer) => ids.includes(layer.id) && layer.groupId).map((layer) => layer.groupId),
+      );
+      if (groupIds.size === 0) {
+        return;
+      }
+      mutate(
+        (current) => ({
+          layers: current.layers.map((layer) =>
+            layer.groupId && groupIds.has(layer.groupId) ? { ...layer, groupId: undefined } : layer),
+        }),
+        false,
+      );
+      set({ editingGroupId: null });
     },
 
     undo: () => {

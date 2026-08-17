@@ -26,16 +26,29 @@ export function ensureFontLoaded(family: string): Promise<void> {
   if (existing) {
     return existing;
   }
+  let cssReady: Promise<void> = Promise.resolve();
   if (isGoogleFont(trimmed)) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(trimmed)}:wght@400;700&display=swap`;
+    // document.fonts.load() only knows about faces declared by the stylesheet,
+    // so wait for the CSS to arrive before asking for the faces.
+    cssReady = new Promise((resolve) => {
+      link.onload = () => {
+        resolve();
+      };
+      link.onerror = () => {
+        resolve();
+      };
+    });
     document.head.appendChild(link);
   }
-  const promise = Promise.all([
-    document.fonts.load(`16px "${trimmed}"`),
-    document.fonts.load(`bold 16px "${trimmed}"`),
-  ])
+  const promise = cssReady
+    .then(() =>
+      Promise.all([
+        document.fonts.load(`16px "${trimmed}"`),
+        document.fonts.load(`bold 16px "${trimmed}"`),
+      ]))
     .then(() => {
       loaded.add(trimmed);
       pending.delete(trimmed);

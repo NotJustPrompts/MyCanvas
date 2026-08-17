@@ -34,6 +34,13 @@ function jsonInit(method: string, body: unknown): RequestInit {
   };
 }
 
+export interface AssetInfo {
+  /** Server-side asset filename (served at /assets/<asset>). */
+  asset: string;
+  /** Original upload filename. */
+  name: string;
+}
+
 export interface CreateDesignInput {
   name?: string;
   aspectRatioId?: string;
@@ -52,11 +59,11 @@ export const api = {
     request<{ ok: boolean }>(`/api/designs/${encodeURIComponent(id)}`, { method: "DELETE" }),
   duplicateDesign: (id: string) =>
     request<Design>(`/api/designs/${encodeURIComponent(id)}/duplicate`, { method: "POST" }),
-  listAssets: () => request<string[]>("/api/assets"),
+  listAssets: () => request<AssetInfo[]>("/api/assets"),
   uploadAsset: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return request<{ asset: string }>("/api/assets", { method: "POST", body: form });
+    return request<AssetInfo>("/api/assets", { method: "POST", body: form });
   },
   deleteAsset: (file: string) =>
     request<{ ok: boolean }>(`/api/assets/${encodeURIComponent(file)}`, { method: "DELETE" }),

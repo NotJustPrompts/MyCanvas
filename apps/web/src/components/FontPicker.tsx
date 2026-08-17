@@ -6,9 +6,11 @@ import { ensureFontLoaded, isGoogleFont } from "../utils/fonts";
 interface FontPickerProps {
   value: string;
   onApply: (family: string) => void;
+  /** Borderless, auto-width toggle for embedding in the floating context bar. */
+  compact?: boolean;
 }
 
-export function FontPicker({ value, onApply }: FontPickerProps) {
+export function FontPicker({ value, onApply, compact = false }: FontPickerProps) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [favorites, setFavorites] = useState<string[] | null>(null);
@@ -114,7 +116,7 @@ export function FontPicker({ value, onApply }: FontPickerProps) {
   };
 
   return (
-    <div className="font-picker" ref={rootRef}>
+    <div className={compact ? "font-picker compact" : "font-picker"} ref={rootRef}>
       <button
         type="button"
         className="font-picker-toggle"

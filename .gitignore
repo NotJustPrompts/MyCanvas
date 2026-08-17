@@ -1,4 +1,6 @@
 node_modules/
 dist/
+.playwright-mcp/
 apps/server/data/
 .DS_Store
+reference/

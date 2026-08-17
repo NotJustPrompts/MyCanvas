@@ -8,6 +8,7 @@ const serverRoot = path.resolve(import.meta.dirname, "..");
 export const dataDir = path.join(serverRoot, "data");
 export const designsDir = path.join(dataDir, "designs");
 export const assetsDir = path.join(dataDir, "assets");
+export const assetsManifestFile = path.join(dataDir, "assets.json");
 export const settingsFile = path.join(dataDir, "settings.json");
 
 export const fontDirs = [

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ASPECT_RATIOS, type DesignSummary } from "@mycanva/shared";
 import { api } from "../api";
+import { Brand } from "../components/Brand";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { relativeEditedTime } from "../utils/relative-time";
 
 export function ProjectList() {
   const [designs, setDesigns] = useState<DesignSummary[] | null>(null);
@@ -63,79 +66,104 @@ export function ProjectList() {
 
   return (
     <div className="list-screen">
-      <header className="list-header">
-        <h1>mycanva</h1>
+      <header className="top-bar">
+        <Brand />
+        <div className="top-bar-actions">
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <div className="list-hero">
+        <h1>What will you design today?</h1>
         <button
           type="button"
-          className="primary"
+          className="primary hero-cta"
           onClick={() => {
             setShowNew(true);
           }}
         >
           New design
         </button>
-      </header>
+      </div>
 
-      {error && <p className="form-error">{error}</p>}
-      {designs === null && !error && <p className="muted">Loading…</p>}
-      {designs !== null && designs.length === 0 && (
-        <p className="muted">No designs yet. Create your first one.</p>
-      )}
+      <div className="list-content">
+        {error && <p className="form-error">{error}</p>}
+        {designs === null && !error && <p className="muted">Loading…</p>}
+        {designs !== null && (
+          <h2 className="section-title">Continue designing</h2>
+        )}
+        {designs !== null && designs.length === 0 && (
+          <p className="muted">No designs yet. Create your first one.</p>
+        )}
 
-      <div className="design-grid">
-        {(designs ?? []).map((design) => (
-          <div key={design.id} className="design-card">
-            <a className="design-thumb" href={`#/edit/${design.id}`}>
-              {design.thumbnail
-                ? (
-                    <img src={design.thumbnail} alt={design.name} />
-                  )
-                : (
-                    <span className="thumb-placeholder">
-                      {design.width}
-                      {" "}
-                      ×
-                      {design.height}
-                    </span>
-                  )}
-            </a>
-            <div className="design-meta">
-              <strong>{design.name}</strong>
-              <span className="muted">
-                {design.width}
-                {" "}
-                ×
-                {design.height}
-                {" "}
-                ·
-                {new Date(design.updatedAt).toLocaleString()}
-              </span>
+        <div className="design-grid">
+          {(designs ?? []).map((design) => (
+            <div
+              key={design.id}
+              className="design-card"
+              role="link"
+              tabIndex={0}
+              onClick={() => {
+                window.location.hash = `#/edit/${design.id}`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  window.location.hash = `#/edit/${design.id}`;
+                }
+              }}
+            >
+              <div className="design-thumb">
+                {design.thumbnail
+                  ? (
+                      <img src={design.thumbnail} alt={design.name} />
+                    )
+                  : (
+                      <span className="thumb-placeholder">
+                        {`${String(design.width)} × ${String(design.height)}`}
+                      </span>
+                    )}
+              </div>
+              <div className="design-meta">
+                <strong>{design.name}</strong>
+                <span className="muted">
+                  {`${String(design.width)} × ${String(design.height)} · ${relativeEditedTime(design.updatedAt)}`}
+                </span>
+              </div>
+              <div className="design-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.location.hash = `#/edit/${design.id}`;
+                  }}
+                >
+                  Open
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    duplicate(design.id);
+                  }}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="secondary danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(design.id, design.name);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <div className="design-actions">
-              <a className="button-link" href={`#/edit/${design.id}`}>
-                Open
-              </a>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  duplicate(design.id);
-                }}
-              >
-                Duplicate
-              </button>
-              <button
-                type="button"
-                className="secondary danger"
-                onClick={() => {
-                  remove(design.id, design.name);
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {showNew && (
@@ -169,24 +197,30 @@ export function ProjectList() {
             <div className="field field-wide">
               <span>Size</span>
               <div className="preset-grid">
-                {ASPECT_RATIOS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={preset.id === presetId ? "preset selected" : "preset"}
-                    onClick={() => {
-                      setPresetId(preset.id);
-                    }}
-                  >
-                    <strong>{preset.label}</strong>
-                    <span className="muted">
-                      {preset.width}
-                      {" "}
-                      ×
-                      {preset.height}
-                    </span>
-                  </button>
-                ))}
+                {ASPECT_RATIOS.map((preset) => {
+                  const landscape = preset.width >= preset.height;
+                  const glyphWidth = landscape ? 32 : Math.max(8, Math.round((24 * preset.width) / preset.height));
+                  const glyphHeight = landscape ? Math.max(8, Math.round((32 * preset.height) / preset.width)) : 24;
+                  const dims = `${String(preset.width)} × ${String(preset.height)}`;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={preset.id === presetId ? "preset selected" : "preset"}
+                      onClick={() => {
+                        setPresetId(preset.id);
+                      }}
+                    >
+                      <span
+                        className="preset-glyph"
+                        style={{ width: glyphWidth, height: glyphHeight }}
+                        aria-hidden="true"
+                      />
+                      <strong>{preset.label}</strong>
+                      <span className="muted">{dims}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="dialog-actions">

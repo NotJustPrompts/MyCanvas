@@ -10,6 +10,7 @@ import { type Design, type DesignSummary, ASPECT_RATIOS } from "@mycanva/shared"
 import { listSystemFonts } from "./system-fonts";
 import {
   assetsDir,
+  assetsManifestFile,
   designsDir,
   ensureDataDirs,
   isSafeId,
@@ -166,8 +167,13 @@ app.post("/api/designs/:id/duplicate", async (c) => {
 
 app.get("/api/assets", async (c) => {
   try {
+    const manifest = (await readJsonFile<Record<string, string>>(assetsManifestFile)) ?? {};
     const files = await readdir(assetsDir);
-    return c.json(files.filter((f) => !f.startsWith(".")));
+    return c.json(
+      files
+        .filter((f) => !f.startsWith("."))
+        .map((asset) => ({ asset, name: manifest[asset] ?? asset })),
+    );
   } catch {
     return c.json([]);
   }
@@ -188,7 +194,10 @@ app.post("/api/assets", async (c) => {
   }
   const asset = `${newId()}${ext}`;
   await writeFile(path.join(assetsDir, asset), Buffer.from(await file.arrayBuffer()));
-  return c.json({ asset }, 201);
+  const manifest = (await readJsonFile<Record<string, string>>(assetsManifestFile)) ?? {};
+  manifest[asset] = file.name;
+  await writeJsonFile(assetsManifestFile, manifest);
+  return c.json({ asset, name: file.name }, 201);
 });
 
 app.delete("/api/assets/:file", async (c) => {
@@ -198,6 +207,11 @@ app.delete("/api/assets/:file", async (c) => {
   }
   try {
     await unlink(path.join(assetsDir, file));
+    const manifest = (await readJsonFile<Record<string, string>>(assetsManifestFile)) ?? {};
+    if (file in manifest) {
+      delete manifest[file];
+      await writeJsonFile(assetsManifestFile, manifest);
+    }
   } catch {
     return c.json({ error: "Not found" }, 404);
   }

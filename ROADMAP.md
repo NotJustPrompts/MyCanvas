@@ -1,0 +1,361 @@
+# mycanva roadmap
+
+A local-first, Canva-lite thumbnail designer. Hono + JSON-on-disk backend (`apps/server`),
+React + react-konva editor (`apps/web`), shared types in `packages/shared`.
+
+Canva reference screenshots live in `reference/` (git-ignored).
+
+## Shipped
+
+### v1
+
+- Monorepo scaffold, MoonBeat eslint rule set, Hono API (designs CRUD, duplicate,
+  asset upload/serve, system font scan, Google Font favorites).
+- Editor: Konva canvas, drag/resize/rotate, text/image/rect/line layers, glow/shadow/stroke
+  effects, layer panel with z-order, undo/redo, debounced autosave with thumbnails.
+- Project list with aspect-ratio picker (1:1, 16:9, 9:16, 21:9, 9:21, 4:3, 3:4).
+- Export PNG/JPG, 0.25x–3x scale, JPG quality, live file-size estimate.
+- Copy/paste layers (Cmd/Ctrl+C/V), duplicate, arrow-key nudge.
+- `npm run dev` runs both apps.
+
+### v1.5 ("Studio Daylight")
+
+- Light-first theme + dark mode (toggle in both top bars, persisted, OS-aware, no flash).
+- Canva-style ergonomics: icon rail (Text/Shapes/Uploads), contextual left panel,
+  floating context bar on selection (duplicate/z-order/delete + text quick controls),
+  bottom zoom slider, violet transformer, gradient-hero projects home, relative-time meta.
+- Drag-and-drop image files onto the canvas (uploads + places at drop point).
+- Fixed: shortcuts (copy/paste/delete/nudge) were dead while non-text controls
+  (sliders, checkboxes) held focus; canvas click now releases control focus.
+
+## In flight
+
+(nothing — see queued passes below)
+
+## Shipped (cont.)
+
+### v1.6 — resize semantics
+
+- Corner anchors scale proportionally (text font scales via scaleX/scaleY).
+- Middle anchors resize the container: text re-wraps (`wrapWidth`, top/bottom middles
+  hidden), rects change width/height attrs, images genuinely crop (new optional
+  `ImageLayer.crop` source-space rect in shared types), lines keep corners-only
+  (angle preserved). Active anchor via `transformer.getActiveAnchor()`.
+- Known nit: image middle-drags show a distorted live preview; correct crop snaps in
+  on release.
+
+### v1.7 — canvas interaction (Pass A)
+
+- Rotate handle below the selection (`rotateAnchorAngle: 180`), 45° rotation snaps.
+- Anchor styling: circles on corners, pills on sides, themed accent stroke.
+- Smart guides: drag-snapping to layer edges/centers + canvas center/edges,
+  magenta hairlines in the overlay layer (never exported). One best guide per axis;
+  rotated layers snap by axis-aligned bounding box.
+- Edit-in-place text: double-click or Enter overlays a styled textarea (pixel-exact),
+  commit on blur/Escape/click-away; empty text commits as a single space.
+
+### v1.8 — menus & panels (Pass B)
+
+- Right-click context menu (canvas + layer rows): Copy/Paste/Duplicate (⌘D added)/
+  Delete, Align-to-page submenu with independent H/V axes (bounds-driven, works for
+  auto-sized text), Bring forward/Send backward.
+- Image layers auto-named `image_N`; server keeps `data/assets.json` manifest of
+  original filenames; Uploads panel shows filename labels.
+- Unified ColorInput everywhere: design-colors row (derived live), default palette,
+  `#rgb`/`#rrggbb`/`rgb(r,g,b)` input, native well.
+
+### v1.9 — shapes & opacity (Pass C+D)
+
+- New `ShapeLayer` type: triangle, hexagon, circle (ellipse), semicircle (dome), star.
+  Same resize semantics as rects; star points normalized to the layer box.
+- Opacity is a 0–100 percentage control (inspector + compact control in ContextBar).
+- Popovers are viewport-aware (`usePopoverPlacement` hook): flip up when clipping,
+  horizontal clamp, 8px margin. ContextMenu audited likewise.
+- Asset manifest entries pruned on asset delete.
+
+### v1.10 — background removal (Pass F)
+
+- 1-click "Remove background" for image layers (inspector button + context menu).
+- `briaai/RMBG-1.4` (quantized) via transformers.js in a dedicated Web Worker;
+  WebGPU with WASM fallback; transferable buffers; model cached in browser Cache API.
+- Cutout saved as a NEW asset; layer asset swapped through the store (undo/redo free);
+  session cache `asset|crop → cutout` for instant re-apply; crop-aware; no-subject
+  toast. Input capped at 1600px long side (original asset always preserved).
+- Fixed upstream quirk: RMBG-1.4's config declares `model_type` verbatim; patched to
+  `segformer` before pipeline creation (transformers.js v4).
+- Measured: model download ~21s (once per browser profile), inference ~3s warm.
+
+### v1.11 — photo colors (Pass G)
+
+- ColorInput popover gains "Background colors" (image covering >95% of canvas) and
+  "Photo colors" rows: per image layer, thumbnail + 5 swatches from node-vibrant
+  (≤200px downscale, crop-aware), ranked by the heuristic (coverage/area/z/centrality).
+- Palettes cached per `asset|crop` in the store; lazy extraction on popover open.
+
+### v1.12 — curved text (Pass H)
+
+- `curve?: number` (−100…100) on TextLayer (optional → old designs valid).
+  `Konva.TextPath` with generated arc when curved: Θ = (|C|/100)·2π, R = W/Θ;
+  smile case (C<0) swept so text reads left-to-right upright.
+- Single-line only while curved; corners-only anchors; edit-in-place shows flat
+  overlay with the curved render ghosted at 0.25 opacity behind.
+
+### v1.13 — text effects (Pass I)
+
+- Mutually-exclusive `effect` union on TextLayer: none/shadow/outline/echo/
+  background/glitch, curated defaults via `defaultTextEffect()`, load-time
+  migration from legacy shadow/stroke fields (kept in storage, ignored after
+  migration). Non-text layers unchanged.
+- Rendering: text LayerNode is a Konva Group (transformer on the group →
+  effect-expanded bounds + proportional corner scaling for free). Outline =
+  2×-thick stroke copy behind fill; echo = 2 trailing copies; background =
+  round-capped band along the line path(s), follows curve arcs; glitch =
+  ±offset channel-split copies.
+- Effects grid in the text inspector with "Ag" preview tiles + per-effect params.
+
+### v1.14 — multi-select & grouping (Pass E)
+
+- Selection is a set (`selectedLayerIds`, last = primary): shift-click toggles,
+  marquee from empty canvas (dashed accent rect, overlay-only, Shift = additive),
+  group drag via Konva's transformer drag proxy, unified dashed bounding box with
+  corners-only anchors, one history entry per multi-transform.
+- Sets work everywhere: Cmd+C/V/D, Delete, arrow nudge, z-order, context menu,
+  ContextBar (Group ≥2 selected / Ungroup, Cmd+G / Cmd+Shift+G).
+- Grouping via `groupId` on the flat layers array: z-consolidation pulls members
+  into a contiguous run at the topmost member's index (internal order preserved),
+  group acts as one entity; double-click enters a group for isolated member
+  editing (Escape exits). Clipboard is `Layer[]`; paste/duplicate remap groupIds.
+- Layers inspector shows groups as collapsible rows (chevron + "Group N" header,
+  members indented, header hover ungroup/delete) — user addition mid-pass.
+- Follow-up fixes: curving multiline text no longer clips (arc radius measured
+  with a scratch TextPath's per-glyph width); effect params + curve are
+  slider+numeric combos (transient drag, one history entry per commit); precise
+  fields (font size, X/Y, dims, rotation) stay plain inputs.
+
+## Queued
+
+Order: B → C+D → F → G → H → I → E. (A and B already shipped; F–I are
+self-contained; E is the most invasive, so it goes last.)
+
+### Pass A — canvas interaction
+
+- **Rotate handle below the selection box** (Canva position; Konva defaults above).
+  Inspector rotation field already exists; keep it two-way synced. 15° snaps with Shift if cheap.
+- **Anchor styling**: circles on corners (scale), pill shapes on sides (container resize),
+  per `reference` screenshots. Konva anchors are styleable.
+- **Smart guides**: while dragging, snap to other layers' edges + centers and to canvas
+  center/edges; magenta/violet guide lines rendered in the overlay layer (never exported);
+  zoom-adjusted snap threshold. Stretch: even-spacing rulers with pixel readouts for 3+ items.
+- **Edit-in-place text**: double-click (or Enter on selection) overlays an HTML textarea
+  exactly over the Konva text node (same font/size/color/align/line-height, zoom-adjusted,
+  same wrap width); commit on blur/Escape/click-away; keyboard shortcuts must stay inert
+  while editing (textarea is already covered by the text-field guard).
+
+### Pass B — menus & panels
+
+- **Right-click context menu** on canvas layers (select + open at cursor, themed, closes on
+  click-away/Escape): Copy ⌘C, Paste ⌘V, Duplicate ⌘D (new shortcut), Delete; divider;
+  **Align to page** submenu — Left/Center/Right and Top/Middle/Bottom as independent axes,
+  computed from rendered bounds (works for auto-sized text); divider; Bring forward /
+  Send backward. Skip Canva's components/comments/lock.
+- **Image naming**: new image layers get sequential names (`image_1`, `image_2`, …).
+  Server stores original upload filename in a manifest (`data/assets.json`) and
+  `GET /api/assets` returns `{asset, name}` pairs; Uploads panel labels thumbnails with the
+  original filename. Backwards compatible: existing assets fall back to raw filename.
+- **Color picker**: unified control everywhere (including background): swatch chip,
+  text input accepting `#rgb` / `#rrggbb` / `rgb(r,g,b)` (normalized to hex),
+  a default palette row, and a "colors in this design" row derived live from the design's
+  layers (fills, strokes, shadows, line colors, background) — deduped, no schema change.
+
+### Pass C - add more shapes
+
+- Add triangle, hexagon, circle, , semicircle, star to the list of basic shapes.
+
+### Pass D - add transparency controls
+
+- For all layers, add a transparency control (a slider from 0 to 100) that allows setting the transparency of the layer.
+
+### Pass E - Implement layer grouping 
+
+**Phase 0 (user request): multi-select + marquee ("lasso") selection.** Selection
+becomes a set (`selectedLayerIds`), not a single id. Shift-click toggles membership;
+dragging from an empty canvas spot draws a marquee rectangle (themed, in the
+overlay layer) and selects every layer whose bounds intersect it. Multi-select
+supports: group drag (move all together), Delete/copy/paste across the set, and a
+dashed unified bounding box. This is the foundation grouping builds on.
+
+Here is a breakdown of how grouping works in Canva and how it affects the properties of the selected elements.
+
+#### **The Dynamics of Grouping**
+
+* **Unified Bounding Box:** When you select multiple elements, Canva draws a temporary dashed bounding box around the entire selection and provides a floating toolbar with a **Group** button.
+* **Single Entity Behavior:** Once grouped, the elements function as a single structural unit. Moving, rotating, or scaling the group via the corner handles applies the transformation proportionally to everything inside the bounding box simultaneously.
+* **Isolated Editing:** Even when grouped, you can still edit individual items. Clicking an element inside a group allows you to change its specific color, font, or crop without needing to ungroup the entire cluster first.
+
+#### **Layering Order (Z-Index) Normalization**
+
+* **Consolidation of Layers:** Every element on a Canva design sits on its own distinct layer (its z-index). When you group elements, they are merged into a single, consolidated layer block within the overall document hierarchy.
+* **Z-Index Shifting:** If you group elements that originally had other unrelated, unselected elements layered between them, the act of grouping forces the selected items together. The new group will automatically shift to the layer position of the topmost element within your selection, pulling any lower selected elements up to join it.
+* **Preserved Internal Hierarchy:** The relative z-index *between* the grouped items is perfectly maintained. If the triangle was layered above the square before grouping, it remains above the square inside the newly formed group.
+
+#### **Normalization of Other Parameters**
+
+* **Rotation Baseline:** Forming a group establishes a brand new rotation axis of 0 degrees for the unified bounding box, regardless of the individual rotation angles of the items inside it. Using the rotation handle at the bottom of the group rotates all items relative to this new shared center point.
+* **Alignment Behavior:** If you use Canva's alignment tools (such as "Align left" or "Center") on a group, the entire cluster moves as one solid block relative to the page margins. If the elements were ungrouped, those same tools would force the individual elements to align with each other.
+* **Positioning Coordinates:** The X and Y coordinates for the group are recalculated based on the outermost edges of the new combined bounding box, rather than the dimensions of the individual shapes.
+
+#### **Layers Inspector & Ungroup (user addition)**
+
+* Grouped layers must appear **as a group** in the layers inspector: a collapsible group row (named, e.g. "Group 1") containing its member layers indented beneath it, instead of a flat list of loose layers.
+* **Ungroup** must be available wherever Group is (floating toolbar + context menu), restoring the members as independent layers at their current positions/rotations.
+
+### Pass F - 1-click background removal (client-side)
+
+Private, home-only project — licensing of model weights is a non-issue here.
+Approach: fully client-side, no server inference, no Python sidecar. The cutout is
+produced in the browser and saved back through the normal asset pipeline.
+
+#### Engine
+
+- **Model:** `briaai/RMBG-1.4` (BiRefNet architecture, quantized ONNX, ~43 MB).
+- **Runtime:** `@huggingface/transformers` (transformers.js) `image-segmentation`
+  pipeline, WebGPU execution with WASM fallback. Reference implementations:
+  transformers.js `examples/remove-background-client`.
+- **Delivery:** dynamic `import()` so the main bundle stays lean; model downloads on
+  first use (progress bar) and persists in the browser cache afterwards.
+- **Threading (required):** the pipeline lives in a dedicated **Web Worker**. The main
+  thread posts the ImageData in; the worker runs graph compilation + inference +
+  mask post-processing and posts the alpha mask back. The canvas thread never
+  blocks — no jank while dragging elements mid-inference. Use transferable buffers
+  (`ImageData.data.transfer` / OffscreenCanvas) to avoid copy overhead. Verify WebGPU
+  availability inside the worker (Chrome: yes; Safari: check — WASM-in-worker is the
+  fallback either way).
+
+#### Pipeline (per click on "Remove background")
+
+1. Read the layer's current asset (respecting `crop` — process what's displayed).
+2. Inference at the model's native 1024² (letterboxed, aspect preserved) → alpha mask.
+3. Upscale mask to the source resolution (bicubic). BiRefNet's detail recovery makes
+   this sufficient; a guided filter against the original is the documented fallback
+   ("Step 3b") if real-world edges disappoint — do not build preemptively.
+4. Composite onto the alpha channel → PNG blob → `POST /api/assets` as a NEW asset.
+   The original asset is never modified.
+
+#### Integration & UX
+
+- Entry points: image-layer inspector button + right-click context menu item.
+- Layer's `asset` field is swapped through the store → undo/redo/autosave just work,
+  and undo never reruns the model (swap back is instant).
+- Session cache `assetId → cutoutAssetId` covers re-apply after undo; the persisted
+  cutout asset covers reloads.
+- Progress UI: model-download progress on first run, then an inference spinner on
+  the layer/panel; canvas stays usable.
+- No-subject edge case: if mask mean ≈ 0, abort and toast
+  "Could not detect a clear subject in this image."
+- Expected latency on Apple Silicon WebGPU: ~0.5–2 s.
+
+#### Notes
+
+- `onnxruntime-web` multithreading benefits from cross-origin isolation (COOP/COEP
+  headers on the vite dev server); single-thread WASM works without it.
+- Explicitly rejected: cloud GPU microservice (Option A of the original spec) and a
+  local Python/FastAPI sidecar — extra moving parts for zero benefit in a private,
+  single-machine app.
+
+### Pass G — "Photo Colors" palette suggestions
+
+Extends the v1.8 ColorInput ("In this design" row) with per-image palettes,
+Canva-style. Sorted by a heuristic so the "star" image's palette comes first.
+
+#### Heuristic ranking (the "star")
+
+Score each image layer on the canvas: background status +50 (bounding box covers
+>95% of canvas — we have no explicit background-image concept), area 0–30
+(proportional), z-index 0–10, centrality 0–10. Sort descending; top palette may be
+elevated to a dedicated "Background colors" section when the +50 criterion hits.
+
+#### Extraction
+
+- Downscale to max 200×200 on an off-screen canvas first (respecting `crop`).
+- `node-vibrant` (vibrant.js): Vibrant, Muted, LightVibrant, DarkVibrant, DarkMuted
+  → exactly 5 swatches.
+- Cache per `assetId` in zustand; compute lazily on color-picker open.
+- Implementation note: at 200×200 the extraction is single-digit ms, so a Web Worker
+  is OPTIONAL here (unlike Pass F where it's required) — decide at build time;
+  don't add worker plumbing just for this.
+
+#### UI
+
+In the ColorInput popover, below "In this design": a "Photo colors" section —
+vertical list, per image (heuristic order): small thumbnail + row of 5 swatches.
+Click applies the color through the existing transient/commit path.
+
+### Pass H — curved / bent text
+
+Curve slider (−100…100) on text layers; 0 = straight. Characters positioned along
+an invisible circle of radius R = W/Θ, Θ = (C/100)·2π.
+
+- **Renderer: `Konva.TextPath`** (Option A) with a dynamically generated SVG arc
+  `M x1 y1 A R R 0 0 sweep x2 y2`. LayerNode renders TextPath when `curve ≠ 0`,
+  plain `Konva.Text` otherwise — shadow/stroke/transformer/export all keep working.
+  (Option B, custom sceneFunc per-glyph rendering, is deferred unless we ever need
+  per-letter effects.)
+- **Data model**: `curve: number` on `TextLayer` (default 0). No schema break.
+- Curve implies single-line (user decision: **no multiline bent text**): `wrapWidth`
+  ignored while curved, newlines in the content are flattened to spaces when
+  `curve ≠ 0`; side-middle anchors disabled when curved, corners scale normally
+  (keeps v1.6 semantics coherent).
+- **C < 0 (smile) gotcha**: sweep the arc so text still reads left-to-right and
+  isn't upside-down.
+- Edit-in-place falls back to flat while typing; curve reapplies on commit. Per
+  Canva (user screenshot 2026-08-17): while editing, keep the curved render (with
+  any effect) ghosted at low opacity behind the flat editable line; the bounding
+  box continues to wrap the curved extent.
+
+### Pass I — text effects (mutually exclusive)
+
+One effect per text layer, or none (Canva model — replaces the current independent
+shadow/stroke toggles on text layers).
+
+- **Data model**: `effect` discriminated union on TextLayer:
+  `none | shadow(color, distance, angle, blur, opacity) | outline(color, thickness)
+  | echo(color, distance, angle) | background(color, spread, roundness, opacity)
+  | glitch(colorPair, distance, angle)`. Migration on load: `shadow.enabled` →
+  shadow effect (offsets → distance+angle), `stroke.enabled` → outline.
+- **Rendering**: the text LayerNode becomes a Konva Group of stacked copies:
+  outline = doubled-thickness stroke-only copy behind the fill copy; echo = 2–3
+  trailing copies; glitch = two channel-split copies offset ±distance (cyan/magenta
+  or red/blue pairs); **background = a thick round-capped stroke along the text's
+  own line path(s)** (per Canva's actual behavior — verified against the user's
+  2026-08-17 screenshot of curved text with a yellow background band). Flat text:
+  one band per laid-out line. Curved text (Pass H): the same SVG arc data as the
+  TextPath, stroked. Spread maps to band thickness, Roundness to caps/joins.
+  Background effect colors are plain solids only (user requirement — reuse the
+  palette/design-colors rows, no gradients).
+  Group client rect gives expanded bounding box + proportional corner-scaling of
+  effect params for free; side handles only change wrapWidth.
+- **UI**: Effects section in the text inspector — grid of square effect buttons
+  with mini "Ag"-style preview glyphs per effect (None highlighted by default),
+  dynamic param panel below (reuse SliderField + ColorInput; angle is a −180…180
+  slider, no custom dial). Clicking an effect injects curated good-looking
+  defaults immediately.
+- **Edit-in-place**: effect suspended while typing, reapplied on commit (the
+  overlay is already flat text).
+
+## Working agreements
+
+- No git mutations until the user asks. **Milestone: when all queued passes
+  (F, G, H, I, E) are done, bump version to 2.0, commit everything (user explicitly
+  authorized this commit), then review IDEAS.md/ideas.md, promote feasible ideas
+  here and implement them.**
+- Known issue to fix post-E (user-reported): applying curve to multiline text
+  flattens the lines but the layer box doesn't resize to the flattened content,
+  clipping it. Recompute bounds from the TextPath on curve/content change.
+- Pre-commit refinement (user-requested): numeric params for effects (angle,
+  distance, blur, thickness, spread, roundness) get the Canva-style slider +
+  synced numeric stepper combo (− value +); precise fields (font size, X/Y,
+  dims) keep plain inputs. Extend SliderField, keep transient-commit.
+- Every UI change: Playwright screenshots in both themes, self-reviewed, then final review
+  by the orchestrator. `npm run check` + `npm run build` stay green.
+- Never touch the user's real design `c6857deda3f89d2d` / asset `47cd6e81f194f81c.png`
+  in `apps/server/data/` during testing; clean up test data afterwards.
