@@ -1,4 +1,4 @@
-import { type Design, type DesignSummary } from "@mycanva/shared";
+import { type Design, type DesignSummary } from "@mycanvas/shared";
 
 export class ApiError extends Error {
   status: number;

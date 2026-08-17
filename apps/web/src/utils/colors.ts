@@ -1,4 +1,4 @@
-import { type Design } from "@mycanva/shared";
+import { type Design } from "@mycanvas/shared";
 
 /**
  * Normalizes "#rgb", "#rrggbb" and "rgb(r, g, b)" to lowercase "#rrggbb".
@@ -49,7 +49,9 @@ export function collectDesignColors(design: Design): string[] {
     if (layer.type === "line") {
       add(layer.strokeColor);
     }
-    add(layer.shadow.enabled ? layer.shadow.color : undefined);
+    if (layer.type !== "frame") {
+      add(layer.shadow.enabled ? layer.shadow.color : undefined);
+    }
   }
   return out;
 }

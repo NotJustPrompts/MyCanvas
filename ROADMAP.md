@@ -1,4 +1,4 @@
-# mycanva roadmap
+# MyCanvas roadmap
 
 A local-first, Canva-lite thumbnail designer. Hono + JSON-on-disk backend (`apps/server`),
 React + react-konva editor (`apps/web`), shared types in `packages/shared`.
@@ -501,6 +501,39 @@ generate images directly into Uploads from a prompt — design TBD with the user
 (server-side proxy to the local runtime vs. direct calls; where generation UI
 lives). Not started; parking L/M/N confirmed by the user.
 
+### Pass O — frames (image containers)
+
+~~Canva-style frames: shape layers that clip an image.~~ **Done** (unreleased,
+post-2.0). `FrameLayer` (shape + width/height/cornerRadius + optional
+`content: {asset, offsetX, offsetY, scale}`; optional → old designs valid).
+Konva Group + clipFunc (rounded-path tracer — corner radius works on every
+shape); instance-patched `getClientRect` reports the shape box (Konva unions
+unclipped children otherwise — transformer/hover/marquee would overshoot).
+Empty frames render the placeholder illustration (sky/cloud/hills Konva
+shapes) which DOES export (it's real content, like Canva). Fills: Uploads
+thumb drag (new `application/x-mycanva-asset` MIME), filesystem drop
+(hit-tests frames first), inspector Choose/Replace/Remove picker. Cover-fit
+`max(w/iw, h/ih)` centered; double-click → content edit (pan clamped to cover,
+wheel zoom anchored at pointer, Enter/Escape/click-away commits once;
+transformer + ContextBar suppressed, dashed outline + hint pill). Corners
+scale frame+content via the group scale; middles resize + re-cover (zoom
+ratio + center preserved, baseScale-safe). Copy/paste/lock/marquee/group ride
+along as normal layer data.
+
+### Drop-target cues (unreleased, post-2.0)
+
+- The full-viewport `.drop-overlay` is gone. Drag feedback is contextual:
+  hovering a FRAME during drag outlines it in accent + soft tint and previews
+  the dragged bitmap cover-fitted inside at 60% (bitmap known only for Uploads
+  drags — `getData` is unreadable during dragover, so the asset id travels via
+  a module stash set on dragstart); the inner ~48px page edge zone previews
+  "set as background" (full-page image at 50% for asset drags, accent tint +
+  pill for file drags); mid-canvas shows nothing, Canva-style. Reject drags
+  (non-image files) get a small floating pill below the context bar.
+- Edge drop inserts a cover-fit image layer at the BOTTOM of the stack
+  (`addImageLayerAsBackground`, image_N naming shared via `nextImageName`).
+  Precedence frame > edge > plain, identical hit tests in dragover and drop.
+
 ## Working agreements
 
 - ~~No git mutations until the user asks. Milestone: bump to 2.0 + commit~~ **Done
@@ -545,6 +578,22 @@ lives). Not started; parking L/M/N confirmed by the user.
   USER'S real image `47cd6e81f194f81c.png` in a throwaway design~~ **Done**:
   cutout bbox hugged the subject (right edge trimmed ~220 display px of empty
   frame); throwaway design + generated assets deleted afterwards.
+- ~~Queued (user-requested, Canva screenshot 2026-08-17 20:32): **multi-select
+  boundaries**~~ **Done** (unreleased, post-2.0): with >1 layer selected, each
+  member gets an accent hairline box (getClientRect — rotation/effects honored,
+  group members collapse into one group box, locked members keep their box) and
+  the unified extent draws as a dashed theme-gray outline; the transformer's own
+  border is suppressed in multi-select (anchors + rotate handle stay). Boxes
+  track live via dragmove/transform hooks. Single selection unchanged.
+- ~~Queued (user-requested): **bigger color swatches**~~ **Done**: 30×30px
+  circles, 8px gaps, 5 per row inside the existing 216px popover (no horizontal
+  scroll); active ring offset bumped to 2px. Photo-row thumbnails unchanged.
+- **Project renamed `mycanva` → `mycanvas`** (display name "MyCanvas" unchanged):
+  workspace scopes (`@mycanvas/*`), root package name, the asset-drag MIME, and
+  the server log line. Deliberately untouched: the `mycanva-theme` localStorage
+  key (renaming it would silently lose the saved theme), README.md (being
+  rewritten separately), `apps/server/data/`, and historical entries above that
+  record the old name (v2.4 rebrand notes, Pass O MIME mention).
 - Every UI change: Playwright screenshots in both themes, self-reviewed, then final review
   by the orchestrator. `npm run check` + `npm run build` stay green.
 - Never touch the user's real design `c6857deda3f89d2d` / asset `47cd6e81f194f81c.png`

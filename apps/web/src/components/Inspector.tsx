@@ -1,7 +1,8 @@
-import { type Layer } from "@mycanva/shared";
+import { type Layer } from "@mycanvas/shared";
 import { type LayerPatch, useEditorStore } from "../store/editorStore";
 import { AiToolsSection } from "./inspector/AiToolsSection";
 import { ShadowPanel, StrokePanel } from "./inspector/EffectPanels";
+import { FrameSection } from "./inspector/FrameSection";
 import { ImageSection } from "./inspector/ImageSection";
 import { PositionSection } from "./inspector/PositionSection";
 import { LineSection, RectSection, ShapeSection } from "./inspector/ShapeSections";
@@ -120,6 +121,7 @@ export function Inspector() {
             />
           </>
         )}
+        {layer.type === "frame" && <FrameSection layer={layer} patch={patch} commit={commitTransient} />}
         {layer.type === "line" && (
           <>
             <LineSection layer={layer} patch={patch} commit={commitTransient} />

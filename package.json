@@ -1,5 +1,5 @@
 {
-  "name": "mycanva",
+  "name": "mycanvas",
   "version": "2.0.0",
   "private": true,
   "description": "A local-first thumbnail designer: text, effects, shapes and images over a canvas, exported to PNG/JPG.",
@@ -9,8 +9,8 @@
   ],
   "scripts": {
     "dev": "trap 'kill 0' EXIT; npm run dev:server & npm run dev:web & wait",
-    "dev:server": "npm run dev --workspace @mycanva/server",
-    "dev:web": "npm run dev --workspace @mycanva/web",
+    "dev:server": "npm run dev --workspace @mycanvas/server",
+    "dev:web": "npm run dev --workspace @mycanvas/web",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "npm run lint -- --fix",
     "typecheck": "npm run typecheck --workspaces --if-present",

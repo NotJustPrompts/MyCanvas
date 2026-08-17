@@ -1,4 +1,4 @@
-import { type ImageCrop, type ImageLayer, defaultShadow } from "@mycanva/shared";
+import { type ImageCrop, type ImageLayer, defaultShadow } from "@mycanvas/shared";
 import { api } from "../api";
 import { newLayerId, useEditorStore } from "../store/editorStore";
 

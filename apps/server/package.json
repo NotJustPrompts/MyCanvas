@@ -1,5 +1,5 @@
 {
-  "name": "@mycanva/server",
+  "name": "@mycanvas/server",
   "version": "2.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
-    "@mycanva/shared": "*",
+    "@mycanvas/shared": "*",
     "hono": "^4.12.31"
   },
   "devDependencies": {

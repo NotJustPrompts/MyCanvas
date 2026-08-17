@@ -1,4 +1,4 @@
-import { type TextLayer } from "@mycanva/shared";
+import { type TextLayer } from "@mycanvas/shared";
 import { primarySelectedId, useEditorStore } from "../store/editorStore";
 import { ColorInput } from "./ColorInput";
 import { FontPicker } from "./FontPicker";
@@ -21,6 +21,7 @@ export function ContextBar() {
   const groupSelection = useEditorStore((state) => state.groupSelection);
   const ungroupSelection = useEditorStore((state) => state.ungroupSelection);
   const editingTextLayerId = useEditorStore((state) => state.editingTextLayerId);
+  const editingFrameId = useEditorStore((state) => state.editingFrameId);
 
   const multi = selectedLayerIds.length > 1;
   const selectedLayers = design?.layers.filter((entry) => selectedLayerIds.includes(entry.id)) ?? [];
@@ -30,7 +31,7 @@ export function ContextBar() {
   const selectionHasGroup = selectedGroupIds.size > 0;
   const allSameGroup = multi && selectedGroupIds.size === 1 && selectedLayers.every((entry) => entry.groupId);
 
-  if (!layer || editingTextLayerId || layer.locked) {
+  if (!layer || editingTextLayerId || editingFrameId || layer.locked) {
     return null;
   }
 

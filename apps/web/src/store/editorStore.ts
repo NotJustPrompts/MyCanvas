@@ -1,12 +1,13 @@
 import {
   type Design,
+  type FrameLayer,
   type ImageLayer,
   type Layer,
   type LineLayer,
   type RectLayer,
   type TextLayer,
   defaultShadow,
-} from "@mycanva/shared";
+} from "@mycanvas/shared";
 import { create } from "zustand";
 import { ApiError, api } from "../api";
 import { makeDesignThumbnail } from "../utils/canvas-bridge";
@@ -24,7 +25,8 @@ interface Snapshot {
 export type LayerPatch = Partial<TextLayer>
   & Partial<ImageLayer>
   & Partial<RectLayer>
-  & Partial<LineLayer>;
+  & Partial<LineLayer>
+  & Partial<FrameLayer>;
 
 const HISTORY_LIMIT = 100;
 const AUTOSAVE_DELAY_MS = 800;
@@ -62,12 +64,17 @@ export interface EditorStore {
     centerX: number,
     centerY: number,
   ) => void;
+  /** Cover-fit image layer inserted at the BOTTOM of the stack (drop-at-edge). */
+  addImageLayerAsBackground: (asset: string, naturalWidth: number, naturalHeight: number) => void;
   /** Incremented whenever an asset is uploaded so the Uploads panel refetches. */
   assetsVersion: number;
   bumpAssetsVersion: () => void;
   /** Text layer currently being edited in place (textarea overlay). */
   editingTextLayerId: string | null;
   setEditingTextLayer: (id: string | null) => void;
+  /** Frame layer whose content is being panned/zoomed (double-click mode). */
+  editingFrameId: string | null;
+  setEditingFrame: (id: string | null) => void;
   /** Open right-click menu (client coords + target layer). */
   contextMenu: { x: number; y: number; layerId: string } | null;
   openContextMenu: (menu: { x: number; y: number; layerId: string }) => void;
@@ -125,6 +132,18 @@ export function primarySelectedId(state: { selectedLayerIds: string[] }): string
  */
 function patchAllowedOnLocked(patch: LayerPatch): boolean {
   return Object.keys(patch).every((key) => key === "locked");
+}
+
+/** Sequential names: next free image_N across the design, case-insensitive. */
+function nextImageName(layers: Layer[]): string {
+  let maxIndex = 0;
+  for (const existing of layers) {
+    const match = /^image_(\d+)$/i.exec(existing.name);
+    if (match?.[1]) {
+      maxIndex = Math.max(maxIndex, Number(match[1]));
+    }
+  }
+  return `image_${String(maxIndex + 1)}`;
 }
 
 export const useEditorStore = create<EditorStore>()((set, get) => {
@@ -206,6 +225,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
         future: [],
         pendingSnapshot: null,
         editingTextLayerId: null,
+        editingFrameId: null,
         contextMenu: null,
       });
       try {
@@ -265,6 +285,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
         future: [],
         pendingSnapshot: null,
         editingTextLayerId: null,
+        editingFrameId: null,
       });
     },
 
@@ -361,18 +382,10 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       const fit = Math.min(1, design.width / naturalWidth, design.height / naturalHeight);
       const width = Math.max(1, Math.round(naturalWidth * fit));
       const height = Math.max(1, Math.round(naturalHeight * fit));
-      // Sequential names: next free image_N across the design, case-insensitive.
-      let maxIndex = 0;
-      for (const existing of design.layers) {
-        const match = /^image_(\d+)$/i.exec(existing.name);
-        if (match?.[1]) {
-          maxIndex = Math.max(maxIndex, Number(match[1]));
-        }
-      }
       const layer: ImageLayer = {
         id: newLayerId(),
         type: "image",
-        name: `image_${String(maxIndex + 1)}`,
+        name: nextImageName(design.layers),
         x: Math.round(centerX - width / 2),
         y: Math.round(centerY - height / 2),
         scaleX: 1,
@@ -388,6 +401,35 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       get().addLayer(layer);
     },
 
+    addImageLayerAsBackground: (asset, naturalWidth, naturalHeight) => {
+      const design = get().design;
+      if (!design) {
+        return;
+      }
+      // Cover-fit the whole canvas (like a CSS cover background), centered,
+      // inserted at the bottom of the stack.
+      const cover = Math.max(design.width / naturalWidth, design.height / naturalHeight);
+      const width = Math.max(1, Math.round(naturalWidth * cover));
+      const height = Math.max(1, Math.round(naturalHeight * cover));
+      const layer: ImageLayer = {
+        id: newLayerId(),
+        type: "image",
+        name: nextImageName(design.layers),
+        x: Math.round((design.width - width) / 2),
+        y: Math.round((design.height - height) / 2),
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        opacity: 1,
+        visible: true,
+        asset,
+        width,
+        height,
+        shadow: defaultShadow(),
+      };
+      get().addLayerAt(layer, 0);
+    },
+
     assetsVersion: 0,
 
     bumpAssetsVersion: () => {
@@ -398,6 +440,12 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
 
     setEditingTextLayer: (id) => {
       set({ editingTextLayerId: id });
+    },
+
+    editingFrameId: null,
+
+    setEditingFrame: (id) => {
+      set({ editingFrameId: id });
     },
 
     contextMenu: null,
@@ -441,7 +489,9 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       }
       mutate(
         (design) => ({
-          layers: design.layers.map((layer) => (layer.id === id ? ({ ...layer, ...patch }) : layer)),
+          // The patch only carries fields valid for the target's type; the
+          // spread widens to the intersection, so narrow it back explicitly.
+          layers: design.layers.map((layer) => (layer.id === id ? ({ ...layer, ...patch }) as Layer : layer)),
         }),
         transient,
       );
@@ -464,7 +514,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
         (current) => ({
           layers: current.layers.map((layer) => {
             const patch = patches.get(layer.id);
-            return patch ? ({ ...layer, ...patch }) : layer;
+            return patch ? ({ ...layer, ...patch }) as Layer : layer;
           }),
         }),
         false,

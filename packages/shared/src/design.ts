@@ -132,7 +132,29 @@ export interface ShapeLayer extends LayerBase {
   shadow: ShadowEffect;
 }
 
-export type Layer = TextLayer | ImageLayer | RectLayer | LineLayer | ShapeLayer;
+export type FrameShape = "rect" | ShapeKind;
+
+/** Image content inside a frame: asset + placement in frame-local units. */
+export interface FrameContent {
+  asset: string;
+  offsetX: number;
+  offsetY: number;
+  /** Cover-fit scale (image px → frame px); >= cover scale at all times. */
+  scale: number;
+}
+
+export interface FrameLayer extends LayerBase {
+  type: "frame";
+  shape: FrameShape;
+  width: number;
+  height: number;
+  /** Rounded corners (px). Optional/0 = sharp; meaningless on circles. */
+  cornerRadius?: number;
+  /** Absent = empty frame (renders the placeholder illustration). */
+  content?: FrameContent;
+}
+
+export type Layer = TextLayer | ImageLayer | RectLayer | LineLayer | ShapeLayer | FrameLayer;
 export type LayerType = Layer["type"];
 
 export interface Design {

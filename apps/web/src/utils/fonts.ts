@@ -1,4 +1,4 @@
-import { GOOGLE_FONTS } from "@mycanva/shared";
+import { GOOGLE_FONTS } from "@mycanvas/shared";
 
 const googleFamilies = new Set(GOOGLE_FONTS.map((font) => font.family));
 

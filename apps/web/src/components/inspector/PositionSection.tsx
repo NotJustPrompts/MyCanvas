@@ -1,4 +1,4 @@
-import { type Layer } from "@mycanva/shared";
+import { type Layer } from "@mycanvas/shared";
 import { NumberField, type SectionProps, SliderField } from "./fields";
 import { Panel } from "./Panel";
 

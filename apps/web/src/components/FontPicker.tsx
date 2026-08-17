@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { GOOGLE_FONTS, type GoogleFont } from "@mycanva/shared";
+import { GOOGLE_FONTS, type GoogleFont } from "@mycanvas/shared";
 import { api } from "../api";
 import { ensureFontLoaded, isGoogleFont } from "../utils/fonts";
 

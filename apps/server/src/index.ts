@@ -5,7 +5,7 @@ import { cors } from "hono/cors";
 import { readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type Design, type DesignSummary, ASPECT_RATIOS } from "@mycanva/shared";
+import { type Design, type DesignSummary, ASPECT_RATIOS } from "@mycanvas/shared";
 
 import { listSystemFonts } from "./system-fonts";
 import {
@@ -240,7 +240,7 @@ app.put("/api/fonts/favorites", async (c) => {
 await ensureDataDirs();
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`mycanva server listening on http://localhost:${info.port}`);
+  console.log(`mycanvas server listening on http://localhost:${info.port}`);
 });
 
 export { app };

@@ -1,4 +1,4 @@
-import { type ShadowEffect, type StrokeEffect } from "@mycanva/shared";
+import { type ShadowEffect, type StrokeEffect } from "@mycanvas/shared";
 import { ColorField, NumberField, SliderField } from "./fields";
 import { Panel } from "./Panel";
 

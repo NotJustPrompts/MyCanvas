@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type ImageLayer } from "@mycanva/shared";
+import { type ImageLayer } from "@mycanvas/shared";
 import { useEditorStore } from "../../store/editorStore";
 import { removeLayerBackground, textBehindSubject } from "../../utils/bg-removal";
 import { applyPortraitMode, getPortraitInfo } from "../../utils/portrait-mode";

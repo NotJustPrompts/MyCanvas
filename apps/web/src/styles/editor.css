@@ -399,37 +399,46 @@ input.context-color::-moz-color-swatch {
   outline: 1.5px dashed var(--accent);
 }
 
-/* Drag-and-drop indicator */
-
-.drop-overlay {
-  position: absolute;
-  inset: 10px;
-  z-index: 15;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  pointer-events: none;
+/* Drag-and-drop indicator: only the reject case shows anything (a small pill);
+   valid drags get contextual cues on the canvas itself (frame/background).
+   Drop pills sit below the floating context bar, which can coexist with them. */
+.content-edit-hint.drop-hint {
+  top: 58px;
 }
 
-.drop-overlay span {
-  font-size: 14px;
-  font-weight: 600;
+.drop-reject-hint {
+  color: var(--danger);
+}
+
+/* Frame content-edit hint (pan/zoom mode after double-clicking a frame). */
+.content-edit-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 16;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--accent);
   background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 8px 18px;
+  padding: 6px 14px;
   box-shadow: var(--shadow-rest);
+  pointer-events: none;
+  white-space: nowrap;
 }
 
-.drop-overlay.reject {
-  border-color: var(--danger);
+/* Frame inspector: inline asset picker grid scrolls instead of growing. */
+.frame-asset-picker {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 8px;
 }
 
-.drop-overlay.reject span {
-  color: var(--danger);
+.field-note {
+  font-size: 11px;
+  margin: 6px 0 0;
 }
 
 /* Layers panel */
@@ -1051,15 +1060,15 @@ input.bg-color {
 .color-swatches {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 8px;
 }
 
 .popover-swatch {
-  width: 20px;
-  height: 20px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 50%;
   cursor: pointer;
 }
 
@@ -1069,7 +1078,7 @@ input.bg-color {
 
 .popover-swatch.active {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .color-custom {
@@ -1081,6 +1090,7 @@ input.bg-color {
 .color-custom .color-hex {
   flex: 1;
   width: auto;
+  min-width: 0; /* let flex shrink below the input's intrinsic size (~20ch), so the row fits the popover without horizontal scroll */
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-inner);

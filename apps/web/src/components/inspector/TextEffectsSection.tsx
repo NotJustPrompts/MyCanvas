@@ -1,4 +1,4 @@
-import { type TextEffect, type TextLayer, defaultTextEffect } from "@mycanva/shared";
+import { type TextEffect, type TextLayer, defaultTextEffect } from "@mycanvas/shared";
 import { ColorField, type SectionProps, SliderField } from "./fields";
 import { Panel } from "./Panel";
 

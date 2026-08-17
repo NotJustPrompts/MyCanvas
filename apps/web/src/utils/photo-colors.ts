@@ -1,5 +1,5 @@
 import { Vibrant } from "node-vibrant/browser";
-import { type Design, type ImageLayer } from "@mycanva/shared";
+import { type Design, type ImageLayer } from "@mycanvas/shared";
 
 export function paletteCacheKey(layer: ImageLayer): string {
   const crop = layer.crop;

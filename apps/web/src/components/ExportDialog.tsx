@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type TextLayer } from "@mycanva/shared";
+import { type TextLayer } from "@mycanvas/shared";
 import { useEditorStore } from "../store/editorStore";
 import { exportDesignImage } from "../utils/canvas-bridge";
 import { ensureFontsLoaded } from "../utils/fonts";

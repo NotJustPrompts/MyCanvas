@@ -1,6 +1,6 @@
 import Konva from "konva";
 import { type RefObject, useEffect, useRef } from "react";
-import { type TextLayer } from "@mycanva/shared";
+import { type TextLayer } from "@mycanvas/shared";
 import { useEditorStore } from "../store/editorStore";
 
 interface TextEditorOverlayProps {

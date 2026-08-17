@@ -1,4 +1,4 @@
-import { type TextLayer } from "@mycanva/shared";
+import { type TextLayer } from "@mycanvas/shared";
 import { FontPicker } from "../FontPicker";
 import { ColorField, NumberField, type SectionProps } from "./fields";
 import { Panel } from "./Panel";

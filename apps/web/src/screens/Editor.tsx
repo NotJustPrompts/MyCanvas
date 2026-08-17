@@ -53,6 +53,11 @@ export function Editor({ designId }: { designId: string }) {
           (target instanceof HTMLInputElement &&
             !["range", "checkbox", "radio", "color", "button"].includes(target.type)));
       const mod = e.metaKey || e.ctrlKey;
+      // Frame content-edit mode owns the keyboard (CanvasStage commits on
+      // Enter/Escape); keep Delete/arrows/undo inert while panning content.
+      if (state.editingFrameId) {
+        return;
+      }
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) {

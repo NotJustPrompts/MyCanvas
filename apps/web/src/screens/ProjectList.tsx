@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ASPECT_RATIOS, type DesignSummary } from "@mycanva/shared";
+import { ASPECT_RATIOS, type DesignSummary } from "@mycanvas/shared";
 import { api } from "../api";
 import { Brand } from "../components/Brand";
 import { ThemeToggle } from "../components/ThemeToggle";

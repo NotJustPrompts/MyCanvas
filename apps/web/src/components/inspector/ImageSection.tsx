@@ -1,4 +1,4 @@
-import { type ImageLayer } from "@mycanva/shared";
+import { type ImageLayer } from "@mycanvas/shared";
 import { getCachedImageSize } from "../../hooks/useImage";
 import { NumberField, type SectionProps } from "./fields";
 import { Panel } from "./Panel";

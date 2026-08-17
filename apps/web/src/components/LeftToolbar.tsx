@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  type FrameLayer,
+  type FrameShape,
   type LineLayer,
   type RectLayer,
   type ShapeKind,
@@ -7,14 +9,47 @@ import {
   type TextLayer,
   defaultShadow,
   defaultStroke,
-} from "@mycanva/shared";
+} from "@mycanvas/shared";
 import { api, type AssetInfo } from "../api";
 import { getCachedImageSize } from "../hooks/useImage";
 import { newLayerId, primarySelectedId, useEditorStore } from "../store/editorStore";
 import { ensureFontLoaded } from "../utils/fonts";
+import { ASSET_DRAG_MIME, framePathData, setCurrentAssetDrag } from "../utils/frames";
 import { ColorInput } from "./ColorInput";
 
 type RailTab = "text" | "shapes" | "uploads";
+
+const FRAME_TILES: { shape: FrameShape; radius: number; label: string }[] = [
+  { shape: "rect", radius: 0, label: "Rectangle" },
+  { shape: "rect", radius: 9, label: "Rounded" },
+  { shape: "circle", radius: 0, label: "Circle" },
+  { shape: "triangle", radius: 0, label: "Triangle" },
+  { shape: "hexagon", radius: 0, label: "Hexagon" },
+  { shape: "semicircle", radius: 0, label: "Semicircle" },
+  { shape: "star", radius: 0, label: "Star" },
+];
+
+/** Drawer thumbnail: the placeholder illustration clipped into the shape. */
+function FrameThumb({ shape, radius }: { shape: FrameShape; radius: number }) {
+  const clipId = `frame-clip-${shape}-${String(radius)}`;
+  return (
+    <svg width="44" height="34" viewBox="0 0 44 34" aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <path d={framePathData(shape, 44, 34, radius)} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <rect width="44" height="34" fill="#d6e9f8" />
+        <ellipse cx="12" cy="35.5" rx="23" ry="19" fill="#b8d97a" />
+        <ellipse cx="38" cy="39" rx="25" ry="21" fill="#7a9e2a" />
+        <circle cx="14" cy="10" r="3.7" fill="#ffffff" />
+        <circle cx="19" cy="8.5" r="4.8" fill="#ffffff" />
+        <circle cx="24" cy="10.5" r="3.4" fill="#ffffff" />
+      </g>
+    </svg>
+  );
+}
 
 export function LeftToolbar() {
   const design = useEditorStore((state) => state.design);
@@ -164,6 +199,28 @@ export function LeftToolbar() {
       fill: "#7c3aed",
       stroke: defaultStroke(),
       shadow: defaultShadow(),
+    };
+    addLayer(layer);
+  };
+
+  const addFrame = (shape: FrameShape, name: string, cornerRadius: number) => {
+    const width = Math.round(design.width / 3.2);
+    const height = Math.round(design.height / 3.2);
+    const layer: FrameLayer = {
+      id: newLayerId(),
+      type: "frame",
+      shape,
+      name,
+      x: Math.round((design.width - width) / 2),
+      y: Math.round((design.height - height) / 2),
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      opacity: 1,
+      visible: true,
+      width,
+      height,
+      cornerRadius,
     };
     addLayer(layer);
   };
@@ -342,6 +399,23 @@ export function LeftToolbar() {
                   <span>Star</span>
                 </button>
               </div>
+              <h3>Frames</h3>
+              <div className="toolbar-buttons">
+                {FRAME_TILES.map((tile) => (
+                  <button
+                    key={`${tile.shape}-${String(tile.radius)}`}
+                    type="button"
+                    className="tool-tile"
+                    title={`${tile.label} frame — drop an image in it`}
+                    onClick={() => {
+                      addFrame(tile.shape, `${tile.label} frame`, tile.radius);
+                    }}
+                  >
+                    <FrameThumb shape={tile.shape} radius={tile.radius} />
+                    <span>{tile.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -372,11 +446,20 @@ export function LeftToolbar() {
                             type="button"
                             className="asset-thumb"
                             title={info.name}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(ASSET_DRAG_MIME, info.asset);
+                              e.dataTransfer.effectAllowed = "copy";
+                              setCurrentAssetDrag(info.asset);
+                            }}
+                            onDragEnd={() => {
+                              setCurrentAssetDrag(null);
+                            }}
                             onClick={() => {
                               addAssetToCanvas(info.asset);
                             }}
                           >
-                            <img src={`/assets/${info.asset}`} alt={info.name} loading="lazy" />
+                            <img src={`/assets/${info.asset}`} alt={info.name} loading="lazy" draggable={false} />
                             <span className="asset-name">{info.name}</span>
                           </button>
                         ))}

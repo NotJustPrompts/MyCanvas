@@ -3,6 +3,9 @@ export { ASPECT_RATIOS } from "./aspect-ratios";
 export type {
   Design,
   DesignSummary,
+  FrameContent,
+  FrameLayer,
+  FrameShape,
   ImageCrop,
   ImageLayer,
   Layer,

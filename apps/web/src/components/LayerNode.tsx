@@ -1,7 +1,8 @@
 import Konva from "konva";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Text, TextPath } from "react-konva";
+import { Circle, Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Text, TextPath } from "react-konva";
 import {
+  type FrameLayer,
   type ImageLayer,
   type Layer,
   type LineLayer,
@@ -10,11 +11,12 @@ import {
   type ShapeLayer,
   type StrokeEffect,
   type TextLayer,
-} from "@mycanva/shared";
+} from "@mycanvas/shared";
 import { useImage } from "../hooks/useImage";
 import { useEditorStore } from "../store/editorStore";
 import { ensureFontLoaded } from "../utils/fonts";
-import { roundedPolygonPath, semicirclePoints } from "../utils/rounded-path";
+import { roundedPolygonPath, shapePoints } from "../utils/rounded-path";
+import { traceFramePath } from "../utils/frames";
 
 interface LayerNodeProps {
   layer: Layer;
@@ -393,32 +395,6 @@ function LineNode({ layer, registerRef }: { layer: LineLayer } & LayerNodeProps)
   );
 }
 
-function starPoints(width: number, height: number): number[] {
-  const raw: number[] = [];
-  for (let i = 0; i < 10; i += 1) {
-    const outer = i % 2 === 0;
-    const angle = -Math.PI / 2 + (i * Math.PI) / 5;
-    const radius = outer ? 1 : 0.42;
-    raw.push(radius * Math.cos(angle), radius * Math.sin(angle));
-  }
-  // Normalize so the star's bounding box spans the full layer box — Konva
-  // derives a Line's width/height from its points, and the resize math
-  // depends on node dimensions matching the layer's declared box.
-  const xs = raw.filter((_, index) => index % 2 === 0);
-  const ys = raw.filter((_, index) => index % 2 === 1);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const points: number[] = [];
-  for (let i = 0; i < raw.length; i += 2) {
-    const px = raw[i] ?? 0;
-    const py = raw[i + 1] ?? 0;
-    points.push(((px - minX) / (maxX - minX)) * width, ((py - minY) / (maxY - minY)) * height);
-  }
-  return points;
-}
-
 function ShapeNode({ layer, registerRef }: { layer: ShapeLayer } & LayerNodeProps) {
   const { common, setRefs } = useCommonNodeProps(layer, registerRef);
   const shared = {
@@ -449,20 +425,114 @@ function ShapeNode({ layer, registerRef }: { layer: ShapeLayer } & LayerNodeProp
           />
         </Group>
       );
-    case "triangle":
-      return <Path data={roundedPolygonPath([w / 2, 0, w, h, 0, h], radius)} {...shared} />;
-    case "hexagon":
-      return (
-        <Path
-          data={roundedPolygonPath([w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2], radius)}
-          {...shared}
-        />
-      );
-    case "star":
-      return <Path data={roundedPolygonPath(starPoints(w, h), radius)} {...shared} />;
-    case "semicircle":
-      return <Path data={roundedPolygonPath(semicirclePoints(w, h), radius)} {...shared} />;
+    default:
+      return <Path data={roundedPolygonPath(shapePoints(layer.shape, w, h), radius)} {...shared} />;
   }
+}
+
+/**
+ * The empty-frame placeholder illustration (Canva-style: pale sky, white
+ * cloud, two green hills). It is real rendered content — an empty frame
+ * exports with the placeholder visible, exactly like Canva.
+ */
+function FramePlaceholder({ width, height }: { width: number; height: number }) {
+  return (
+    <>
+      <Rect width={width} height={height} fill="#d6e9f8" listening={false} />
+      <Ellipse x={width * 0.28} y={height * 1.04} radiusX={width * 0.52} radiusY={height * 0.56} fill="#b8d97a" listening={false} />
+      <Ellipse x={width * 0.86} y={height * 1.14} radiusX={width * 0.58} radiusY={height * 0.62} fill="#7a9e2a" listening={false} />
+      <Circle x={width * 0.32} y={height * 0.3} radius={height * 0.11} fill="#ffffff" listening={false} />
+      <Circle x={width * 0.43} y={height * 0.25} radius={height * 0.14} fill="#ffffff" listening={false} />
+      <Circle x={width * 0.54} y={height * 0.31} radius={height * 0.1} fill="#ffffff" listening={false} />
+    </>
+  );
+}
+
+/**
+ * Frame (image container): a clipped group — children render only inside the
+ * shape. The invisible hit plate gives the group a full-shape hit area (the
+ * content/placeholder don't listen, so every pointer event reaches the
+ * group). clipFunc reads live node dims so middle-anchor resizes re-clip.
+ */
+function FrameNode({ layer, registerRef }: { layer: FrameLayer } & LayerNodeProps) {
+  const { common, setRefs, localRef } = useCommonNodeProps(layer, registerRef);
+  const editing = useEditorStore((state) => state.editingFrameId === layer.id);
+  const content = layer.content;
+  const image = useImage(content ? `/assets/${content.asset}` : undefined);
+  const radius = layer.cornerRadius ?? 0;
+
+  const setFrameRefs = (node: Konva.Group | null) => {
+    setRefs(node);
+    if (node) {
+      // Konva's Container.getClientRect unions children and ignores clipFunc —
+      // for a filled frame that's the unclipped content, which inflates the
+      // transformer/hover/marquee boxes. Report the shape box instead.
+      node.getClientRect = (config?: { skipTransform?: boolean }) => {
+        const width = node.width();
+        const height = node.height();
+        if (config?.skipTransform) {
+          return { x: 0, y: 0, width, height };
+        }
+        const transform = node.getTransform();
+        const points = [
+          transform.point({ x: 0, y: 0 }),
+          transform.point({ x: width, y: 0 }),
+          transform.point({ x: width, y: height }),
+          transform.point({ x: 0, y: height }),
+        ];
+        const xs = points.map((point) => point.x);
+        const ys = points.map((point) => point.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+      };
+    }
+  };
+
+  const openContentEdit = () => {
+    // Grouped frame: first double-click enters the group, second edits content.
+    const state = useEditorStore.getState();
+    if (layer.groupId && state.editingGroupId !== layer.groupId) {
+      state.setEditingGroup(layer.groupId);
+      state.setSelectedLayers([layer.id]);
+      return;
+    }
+    if (layer.content) {
+      state.setEditingFrame(layer.id);
+    }
+  };
+
+  return (
+    <Group
+      ref={setFrameRefs}
+      {...common}
+      width={layer.width}
+      height={layer.height}
+      draggable={!layer.locked && !editing}
+      clipFunc={(ctx) => {
+        const node = localRef.current;
+        traceFramePath(ctx, layer.shape, node?.width() ?? layer.width, node?.height() ?? layer.height, radius);
+      }}
+      onDblClick={openContentEdit}
+      onDblTap={openContentEdit}
+    >
+      <Rect width={layer.width} height={layer.height} fill="rgba(0,0,0,0)" />
+      {content && image
+        ? (
+            <KonvaImage
+              image={image}
+              x={content.offsetX}
+              y={content.offsetY}
+              scaleX={content.scale}
+              scaleY={content.scale}
+              listening={false}
+            />
+          )
+        : <FramePlaceholder width={layer.width} height={layer.height} />}
+    </Group>
+  );
 }
 
 export function LayerNode({ layer, registerRef }: LayerNodeProps) {
@@ -477,5 +547,7 @@ export function LayerNode({ layer, registerRef }: LayerNodeProps) {
       return <LineNode layer={layer} registerRef={registerRef} />;
     case "shape":
       return <ShapeNode layer={layer} registerRef={registerRef} />;
+    case "frame":
+      return <FrameNode layer={layer} registerRef={registerRef} />;
   }
 }

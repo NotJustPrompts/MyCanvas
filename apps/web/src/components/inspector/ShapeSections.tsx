@@ -1,4 +1,4 @@
-import { type LineLayer, type RectLayer, type ShapeLayer } from "@mycanva/shared";
+import { type LineLayer, type RectLayer, type ShapeLayer } from "@mycanvas/shared";
 import { ColorField, NumberField, type SectionProps } from "./fields";
 import { Panel } from "./Panel";
 

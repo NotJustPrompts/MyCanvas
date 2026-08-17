@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type Layer } from "@mycanva/shared";
+import { type Layer } from "@mycanvas/shared";
 import { useEditorStore } from "../store/editorStore";
 
 const TYPE_LABELS: Record<Layer["type"], string> = {
@@ -8,6 +8,7 @@ const TYPE_LABELS: Record<Layer["type"], string> = {
   rect: "Rect",
   line: "Line",
   shape: "Shape",
+  frame: "Frame",
 };
 
 function EyeIcon({ visible }: { visible: boolean }) {

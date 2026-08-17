@@ -1,4 +1,4 @@
-import { type ImageCrop, type ImageLayer } from "@mycanva/shared";
+import { type ImageCrop, type ImageLayer } from "@mycanvas/shared";
 import { api } from "../api";
 import { useEditorStore } from "../store/editorStore";
 import { type DepthMap, estimateDepth, loadAssetPixels } from "./bg-removal";
