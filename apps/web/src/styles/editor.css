@@ -394,6 +394,11 @@ input.context-color::-moz-color-swatch {
   white-space: pre-wrap;
 }
 
+/* app.css resets textarea:focus to outline:none — keep the editing frame. */
+.text-editor-overlay:focus {
+  outline: 1.5px dashed var(--accent);
+}
+
 /* Drag-and-drop indicator */
 
 .drop-overlay {
@@ -503,6 +508,22 @@ input.context-color::-moz-color-swatch {
   display: inline-flex;
 }
 
+/* Lock toggle sits outside .layer-actions (next to the eye): hover-revealed
+   like the other actions, but persistent + accented while the layer is locked. */
+.layer-row .lock-toggle {
+  display: none;
+}
+
+.layer-row:hover .lock-toggle,
+.layer-row.selected .lock-toggle,
+.layer-row .lock-toggle.active {
+  display: inline-flex;
+}
+
+.layer-row .lock-toggle.active {
+  color: var(--accent);
+}
+
 /* Group rows */
 
 .layer-group {
@@ -537,6 +558,26 @@ input.context-color::-moz-color-swatch {
 .inspector-panels {
   display: flex;
   flex-direction: column;
+}
+
+/* Locked layer: the normal panels render inert under a lock notice. */
+.inspector-panels.locked {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.inspector-lock-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inner);
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .panel {

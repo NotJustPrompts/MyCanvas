@@ -46,7 +46,21 @@ export function Inspector() {
           layers selected — showing the primary layer.
         </p>
       )}
-      <div className="inspector-panels" key={layer.id}>
+      {layer.locked && (
+        <div className="inspector-lock-notice">
+          <span>This layer is locked — properties are frozen.</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              updateLayer(layer.id, { locked: false });
+            }}
+          >
+            Unlock
+          </button>
+        </div>
+      )}
+      <div className={layer.locked ? "inspector-panels locked" : "inspector-panels"} key={layer.id}>
         <PositionSection layer={layer} patch={patch} commit={commitTransient} />
         {layer.type === "text" && (
           <>

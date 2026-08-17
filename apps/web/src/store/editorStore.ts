@@ -84,6 +84,8 @@ export interface EditorStore {
   updateLayer: (id: string, patch: LayerPatch, transient?: boolean) => void;
   /** Multi-layer patch, one history entry (group drag/transform write-back). */
   updateLayers: (entries: { id: string; patch: LayerPatch }[]) => void;
+  /** Lock the selection — or unlock it when every selected layer is locked. */
+  toggleLockSelected: () => void;
   commitTransient: () => void;
   removeLayer: (id: string) => void;
   removeSelectedLayers: () => void;
@@ -114,6 +116,15 @@ export function newLayerId(): string {
 /** The primary layer of a selection set (last clicked), or null. */
 export function primarySelectedId(state: { selectedLayerIds: string[] }): string | null {
   return state.selectedLayerIds[state.selectedLayerIds.length - 1] ?? null;
+}
+
+/**
+ * Lock guard: a locked layer only accepts patches that change `locked` itself
+ * (i.e. unlock). Everything else — geometry, style, name — is a no-op so no
+ * UI path can bypass the freeze.
+ */
+function patchAllowedOnLocked(patch: LayerPatch): boolean {
+  return Object.keys(patch).every((key) => key === "locked");
 }
 
 export const useEditorStore = create<EditorStore>()((set, get) => {
@@ -424,6 +435,10 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
     },
 
     updateLayer: (id, patch, transient = false) => {
+      const target = get().design?.layers.find((layer) => layer.id === id);
+      if (target?.locked && !patchAllowedOnLocked(patch)) {
+        return;
+      }
       mutate(
         (design) => ({
           layers: design.layers.map((layer) => (layer.id === id ? ({ ...layer, ...patch }) : layer)),
@@ -433,16 +448,41 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
     },
 
     updateLayers: (entries) => {
-      const patches = new Map(entries.map((entry) => [entry.id, entry.patch]));
+      const design = get().design;
+      if (!design) {
+        return;
+      }
+      const allowed = entries.filter((entry) => {
+        const layer = design.layers.find((candidate) => candidate.id === entry.id);
+        return !layer?.locked || patchAllowedOnLocked(entry.patch);
+      });
+      if (allowed.length === 0) {
+        return;
+      }
+      const patches = new Map(allowed.map((entry) => [entry.id, entry.patch]));
       mutate(
-        (design) => ({
-          layers: design.layers.map((layer) => {
+        (current) => ({
+          layers: current.layers.map((layer) => {
             const patch = patches.get(layer.id);
             return patch ? ({ ...layer, ...patch }) : layer;
           }),
         }),
         false,
       );
+    },
+
+    toggleLockSelected: () => {
+      const design = get().design;
+      const ids = get().selectedLayerIds;
+      if (!design || ids.length === 0) {
+        return;
+      }
+      const selected = design.layers.filter((layer) => ids.includes(layer.id));
+      if (selected.length === 0) {
+        return;
+      }
+      const unlock = selected.every((layer) => layer.locked);
+      get().updateLayers(selected.map((layer) => ({ id: layer.id, patch: { locked: !unlock } })));
     },
 
     commitTransient: () => {
@@ -458,6 +498,10 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
     },
 
     removeLayer: (id) => {
+      const target = get().design?.layers.find((layer) => layer.id === id);
+      if (target?.locked) {
+        return;
+      }
       mutate((design) => ({ layers: design.layers.filter((layer) => layer.id !== id) }), false);
       set((state) => ({ selectedLayerIds: state.selectedLayerIds.filter((entry) => entry !== id) }));
     },
@@ -467,8 +511,16 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       if (ids.length === 0) {
         return;
       }
-      mutate((design) => ({ layers: design.layers.filter((layer) => !ids.includes(layer.id)) }), false);
-      set({ selectedLayerIds: [] });
+      const design = get().design;
+      // Locked layers survive Delete; unlocked ones are removed normally.
+      const removable = new Set(
+        design?.layers.filter((layer) => ids.includes(layer.id) && !layer.locked).map((layer) => layer.id),
+      );
+      if (removable.size === 0) {
+        return;
+      }
+      mutate((current) => ({ layers: current.layers.filter((layer) => !removable.has(layer.id)) }), false);
+      set((state) => ({ selectedLayerIds: state.selectedLayerIds.filter((entry) => !removable.has(entry)) }));
     },
 
     duplicateLayer: (id) => {
@@ -554,7 +606,14 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
     },
 
     moveSelectedLayers: (direction) => {
-      const ids = new Set(get().selectedLayerIds);
+      const design = get().design;
+      // Z-order freeze: locked layers never move; unlocked layers pass
+      // behind/in front of them normally.
+      const ids = new Set(
+        design?.layers
+          .filter((layer) => get().selectedLayerIds.includes(layer.id) && !layer.locked)
+          .map((layer) => layer.id),
+      );
       if (ids.size === 0) {
         return;
       }

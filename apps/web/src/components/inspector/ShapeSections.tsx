@@ -47,7 +47,7 @@ export function RectSection({ layer, patch, commit }: SectionProps<RectLayer>) {
   );
 }
 
-/** Shape (triangle/hexagon/circle/semicircle/star): size + fill. */
+/** Shape (triangle/hexagon/circle/semicircle/star): size, fill, corner radius (not circle). */
 export function ShapeSection({ layer, patch, commit }: SectionProps<ShapeLayer>) {
   return (
     <Panel title="Shape">
@@ -78,6 +78,17 @@ export function ShapeSection({ layer, patch, commit }: SectionProps<ShapeLayer>)
           }}
           onCommit={commit}
         />
+        {layer.shape !== "circle" && (
+          <NumberField
+            label="Corner radius"
+            value={layer.cornerRadius ?? 0}
+            min={0}
+            onChange={(cornerRadius) => {
+              patch({ cornerRadius }, true);
+            }}
+            onCommit={commit}
+          />
+        )}
       </div>
     </Panel>
   );

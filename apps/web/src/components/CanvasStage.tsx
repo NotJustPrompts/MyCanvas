@@ -1,7 +1,7 @@
 import Konva from "konva";
 import { type DragEvent as ReactDragEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
-import { type Design } from "@mycanva/shared";
+import { Arc, Group, Layer, Line, Rect, Stage, Transformer } from "react-konva";
+import { type Design, type Layer as EditorLayer } from "@mycanva/shared";
 import { api } from "../api";
 import { useEditorStore, primarySelectedId } from "../store/editorStore";
 import { getCachedImageSize, useImage } from "../hooks/useImage";
@@ -38,6 +38,122 @@ function getCheckerDataUrl(): string {
   return checkerDataUrl;
 }
 
+const MIDDLE_X_ANCHORS = new Set(["middle-left", "middle-right"]);
+const MIDDLE_Y_ANCHORS = new Set(["top-center", "bottom-center"]);
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * One incremental "resize, don't scale" bake for middle-anchor drags: folds the
+ * transformer's per-frame scale DELTA into real geometry — image crop + box
+ * size, text wrap width — so the user sees the actual crop growing or the text
+ * re-wrapping live instead of a distorted stretch.
+ *
+ * The node's absolute scale is never touched: the delta is applied relative to
+ * `baseScale` (captured at transformstart) and the node scale is restored to it
+ * after each bake, so a layer carrying an earlier corner-scale (scaleX ≠ 1)
+ * keeps its visual size — only the wrap/crop changes. (Resetting scale to 1
+ * here made scaled text snap back to its stored font size mid-drag.)
+ *
+ * Runs on every `transform` frame (imperative node writes only — the store and
+ * history are untouched mid-drag) and once more at `transformend` to absorb
+ * the residual delta, so the committed patch is read straight from the node.
+ * The transformer re-derives each frame's delta from the node's current rect
+ * (it resets its cache after every move), so per-frame baking is safe.
+ * Returns true when the bake applied.
+ */
+function bakeMiddleTransform(
+  node: Konva.Node,
+  layer: EditorLayer,
+  anchor: string,
+  baseScale: { x: number; y: number },
+): boolean {
+  if (
+    layer.type === "image" &&
+    node instanceof Konva.Image &&
+    (MIDDLE_X_ANCHORS.has(anchor) || MIDDLE_Y_ANCHORS.has(anchor))
+  ) {
+    const natural = getCachedImageSize(`/assets/${layer.asset}`);
+    const naturalW = natural?.width ?? layer.width;
+    const naturalH = natural?.height ?? layer.height;
+    const stored = node.crop();
+    const crop =
+      stored && stored.width > 0 && stored.height > 0
+        ? stored
+        : { x: 0, y: 0, width: naturalW, height: naturalH };
+    if (MIDDLE_X_ANCHORS.has(anchor)) {
+      const base = baseScale.x === 0 ? 1 : baseScale.x;
+      const delta = node.scaleX() / base;
+      const prevWidth = node.width();
+      // Visual px per source px at the drag-start scale — invariant of the drag.
+      const dispRatio = (prevWidth * base) / crop.width;
+      let cropX = crop.x;
+      let cropW: number;
+      if (anchor === "middle-left") {
+        const right = crop.x + crop.width;
+        cropX = clampNumber(crop.x + crop.width * (1 - delta), 0, right - 1);
+        cropW = right - cropX;
+      } else {
+        cropW = clampNumber(crop.width * delta, 1, naturalW - crop.x);
+      }
+      const width = Math.max(1, (cropW * dispRatio) / base);
+      if (anchor === "middle-left") {
+        // Keep the visible right edge pinned while the crop window slides.
+        node.x(node.x() + prevWidth * node.scaleX() - width * base);
+      }
+      node.width(width);
+      node.crop({ ...crop, x: cropX, width: cropW });
+    } else {
+      const base = baseScale.y === 0 ? 1 : baseScale.y;
+      const delta = node.scaleY() / base;
+      const prevHeight = node.height();
+      const dispRatio = (prevHeight * base) / crop.height;
+      let cropY = crop.y;
+      let cropH: number;
+      if (anchor === "top-center") {
+        const bottom = crop.y + crop.height;
+        cropY = clampNumber(crop.y + crop.height * (1 - delta), 0, bottom - 1);
+        cropH = bottom - cropY;
+      } else {
+        cropH = clampNumber(crop.height * delta, 1, naturalH - crop.y);
+      }
+      const height = Math.max(1, (cropH * dispRatio) / base);
+      if (anchor === "top-center") {
+        node.y(node.y() + prevHeight * node.scaleY() - height * base);
+      }
+      node.height(height);
+      node.crop({ ...crop, y: cropY, height: cropH });
+    }
+    node.scaleX(baseScale.x);
+    node.scaleY(baseScale.y);
+    return true;
+  }
+  if (layer.type === "text" && MIDDLE_X_ANCHORS.has(anchor)) {
+    // The transformer is attached to the (possibly grouped) node; resize the
+    // text child so effect margins don't leak into the wrap width.
+    const measureNode =
+      node instanceof Konva.Container
+        ? (node.findOne("Text") ?? node.findOne("TextPath") ?? node)
+        : node;
+    const base = baseScale.x === 0 ? 1 : baseScale.x;
+    const sx = node.scaleX();
+    const prevWidth = measureNode.width();
+    // wrapWidth lives in unscaled units: visual width ÷ drag-start scale.
+    const wrapWidth = Math.max(20, (prevWidth * sx) / base);
+    if (anchor === "middle-left") {
+      // Pin the text box's right edge (the group origin is the text origin).
+      node.x(node.x() + prevWidth * sx - wrapWidth * base);
+    }
+    measureNode.width(wrapWidth);
+    node.scaleX(baseScale.x);
+    node.scaleY(baseScale.y);
+    return true;
+  }
+  return false;
+}
+
 export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
   const selectedLayerIds = useEditorStore((state) => state.selectedLayerIds);
   const selectLayer = useEditorStore((state) => state.selectLayer);
@@ -56,9 +172,14 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
   const naturalRef = useRef<HTMLDivElement | null>(null);
   const dragDepth = useRef(0);
   const activeAnchorRef = useRef<string | null>(null);
+  const transformBaseScaleRef = useRef({ x: 1, y: 1 });
   const lastDragWriteRef = useRef(0);
   const marqueeRectRef = useRef<Konva.Rect | null>(null);
   const [dropState, setDropState] = useState<"ready" | "reject" | null>(null);
+  /** Hover preview box (design coords); null while suppressed/nothing hovered. */
+  const [hoverBox, setHoverBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  /** >0 suppresses the hover box: dragging, marquee-ing, or transforming. */
+  const hoverSuppressRef = useRef(0);
 
   const transparent = design.background === "transparent";
   const checkerImage = useImage(transparent ? getCheckerDataUrl() : undefined);
@@ -184,6 +305,56 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
       });
       node.on("dragend.guides", hideGuides);
 
+      // Hover preview box: outline the layer under the pointer (or its whole
+      // group — that's what a click would select; inside an entered group, the
+      // member). Suppressed while dragging/marquee-ing/transforming and for
+      // selected layers (they have the real transformer frame).
+      node.on("mouseenter.hover", () => {
+        if (hoverSuppressRef.current > 0) {
+          return;
+        }
+        const state = useEditorStore.getState();
+        if (state.selectedLayerIds.includes(id) || state.editingTextLayerId) {
+          return;
+        }
+        const layer = state.design?.layers.find((entry) => entry.id === id);
+        if (!layer?.visible) {
+          return;
+        }
+        const groupId = layer.groupId && layer.groupId !== state.editingGroupId ? layer.groupId : null;
+        const members = groupId
+          ? (state.design?.layers.filter((entry) => entry.groupId === groupId) ?? [])
+          : [layer];
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const member of members) {
+          const memberNode = nodesRef.current.get(member.id);
+          if (!memberNode || !member.visible) {
+            continue;
+          }
+          const rect = memberNode.getClientRect({ skipShadow: true });
+          minX = Math.min(minX, rect.x);
+          minY = Math.min(minY, rect.y);
+          maxX = Math.max(maxX, rect.x + rect.width);
+          maxY = Math.max(maxY, rect.y + rect.height);
+        }
+        if (Number.isFinite(minX)) {
+          setHoverBox({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
+        }
+      });
+      node.on("mouseleave.hover", () => {
+        setHoverBox(null);
+      });
+      node.on("dragstart.hover", () => {
+        hoverSuppressRef.current += 1;
+        setHoverBox(null);
+      });
+      node.on("dragend.hover", () => {
+        hoverSuppressRef.current = Math.max(0, hoverSuppressRef.current - 1);
+      });
+
       // Multi-drag: the transformer proxies drags to all attached nodes (and
       // startDrag()s them, so sibling dragends fire too) — write back every
       // attached node once per gesture, guarded by a tick window.
@@ -232,9 +403,35 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
 
   const onTransformStart = () => {
     activeAnchorRef.current = transformerRef.current?.getActiveAnchor() ?? null;
+    hoverSuppressRef.current += 1;
+    setHoverBox(null);
+    // Middle-anchor bakes apply per-frame deltas relative to this scale so a
+    // layer carrying an earlier corner-scale keeps its visual size.
+    const node = transformerRef.current?.nodes()[0];
+    transformBaseScaleRef.current = { x: node?.scaleX() ?? 1, y: node?.scaleY() ?? 1 };
+  };
+
+  // Live middle-anchor preview: fold the scale delta into crop/wrap width on
+  // every frame (node attrs only — no store writes, so history stays clean).
+  const onTransform = () => {
+    const transformer = transformerRef.current;
+    const nodes = transformer?.nodes() ?? [];
+    if (!transformer || nodes.length !== 1) {
+      return;
+    }
+    const anchor = transformer.getActiveAnchor();
+    const node = nodes[0];
+    if (!anchor || !node) {
+      return;
+    }
+    const layer = useEditorStore.getState().design?.layers.find((entry) => entry.id === node.id());
+    if (layer && bakeMiddleTransform(node, layer, anchor, transformBaseScaleRef.current)) {
+      node.getLayer()?.batchDraw();
+    }
   };
 
   const onTransformEnd = () => {
+    hoverSuppressRef.current = Math.max(0, hoverSuppressRef.current - 1);
     const transformer = transformerRef.current;
     const anchor = activeAnchorRef.current;
     activeAnchorRef.current = null;
@@ -269,25 +466,25 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
     const isMiddleX = anchor === "middle-left" || anchor === "middle-right";
     const isMiddleY = anchor === "top-center" || anchor === "bottom-center";
 
-    // Middle drags resize the box, not the content: persist real dimensions
-    // and reset scale to 1 instead of accumulating scaleX/scaleY. The node
-    // scale is also reset imperatively — react-konva skips re-applying props
-    // whose value did not change (1 → 1), leaving the node's transform-mutated
-    // scale in place otherwise.
+    // Middle drags resize the box, not the content. The live bake works in
+    // unscaled units and restores the node's drag-start scale, so the commit
+    // reads everything back from the node — scale included — unchanged.
     if (isMiddleX && layer.type === "text") {
-      // The transformer is attached to the (possibly grouped) node; measure
-      // the text child so effect margins don't leak into the wrap width.
+      // Absorb any residual delta, then read the live-baked wrap width back.
+      bakeMiddleTransform(node, layer, anchor, transformBaseScaleRef.current);
       const measureNode =
         node instanceof Konva.Container
           ? (node.findOne("Text") ?? node.findOne("TextPath") ?? node)
           : node;
-      const wrapWidth = Math.max(20, Math.round(measureNode.width() * sx));
-      node.scaleX(1);
-      node.scaleY(1);
-      updateLayer(layer.id, { ...pos, wrapWidth, scaleX: 1, scaleY: 1 });
+      const wrapWidth = Math.max(20, Math.round(measureNode.width()));
+      updateLayer(layer.id, { ...pos, wrapWidth, scaleX: node.scaleX(), scaleY: node.scaleY() });
       return;
     }
     if ((isMiddleX || isMiddleY) && (layer.type === "rect" || layer.type === "shape")) {
+      // Rects/shapes have no scale-dependent content (uniform fill), so the
+      // total scale is baked into the dimensions and normalized to 1 — the
+      // inspector then shows true visual sizes. (Audit note: a stroked shape's
+      // stroke renormalizes to full strength here — pre-existing semantics.)
       const width = Math.max(1, Math.round(node.width() * sx));
       const height = Math.max(1, Math.round(node.height() * sy));
       node.scaleX(1);
@@ -297,60 +494,22 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
       updateLayer(layer.id, { ...pos, width, height, scaleX: 1, scaleY: 1 });
       return;
     }
-    if ((isMiddleX || isMiddleY) && layer.type === "image") {
+    if ((isMiddleX || isMiddleY) && layer.type === "image" && node instanceof Konva.Image) {
       // Middle drags crop: the visible window into the source image changes,
-      // the content is never distorted.
-      const natural = getCachedImageSize(`/assets/${layer.asset}`);
-      const naturalW = natural?.width ?? layer.width;
-      const naturalH = natural?.height ?? layer.height;
-      const crop = layer.crop ?? { x: 0, y: 0, width: naturalW, height: naturalH };
-      const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-      if (isMiddleX) {
-        const ratio = layer.width / crop.width;
-        let cropX = crop.x;
-        let cropW: number;
-        if (anchor === "middle-left") {
-          const right = crop.x + crop.width;
-          cropX = clamp(crop.x + crop.width * (1 - sx), 0, right - 1);
-          cropW = right - cropX;
-        } else {
-          cropW = clamp(crop.width * sx, 1, naturalW - crop.x);
-        }
-        const width = Math.max(1, Math.round(cropW * ratio));
-        node.scaleX(1);
-        node.scaleY(1);
-        updateLayer(layer.id, {
-          x: anchor === "middle-left" ? layer.x + layer.width - width : layer.x,
-          y: node.y(),
-          rotation: node.rotation(),
-          width,
-          crop: { ...crop, x: cropX, width: cropW },
-          scaleX: 1,
-          scaleY: 1,
-        });
-        return;
-      }
-      const ratio = layer.height / crop.height;
-      let cropY = crop.y;
-      let cropH: number;
-      if (anchor === "top-center") {
-        const bottom = crop.y + crop.height;
-        cropY = clamp(crop.y + crop.height * (1 - sy), 0, bottom - 1);
-        cropH = bottom - cropY;
-      } else {
-        cropH = clamp(crop.height * sy, 1, naturalH - crop.y);
-      }
-      const height = Math.max(1, Math.round(cropH * ratio));
-      node.scaleX(1);
-      node.scaleY(1);
+      // the content is never distorted. The live preview already baked the
+      // geometry into the node — absorb the residual delta and commit it.
+      bakeMiddleTransform(node, layer, anchor, transformBaseScaleRef.current);
+      const crop = node.crop();
       updateLayer(layer.id, {
         x: node.x(),
-        y: anchor === "top-center" ? layer.y + layer.height - height : layer.y,
+        y: node.y(),
         rotation: node.rotation(),
-        height,
-        crop: { ...crop, y: cropY, height: cropH },
-        scaleX: 1,
-        scaleY: 1,
+        ...(isMiddleX
+          ? { width: Math.max(1, Math.round(node.width())) }
+          : { height: Math.max(1, Math.round(node.height())) }),
+        crop,
+        scaleX: node.scaleX(),
+        scaleY: node.scaleY(),
       });
       return;
     }
@@ -380,7 +539,8 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
   }, [design.width, design.height, onFitScale]);
 
   // Attach the transformer to the selected nodes (detached while editing text
-  // in place so the frame doesn't fight the textarea overlay).
+  // in place so the frame doesn't fight the textarea overlay). Locked layers
+  // keep their selection but never get the transformer — no anchors, no rotate.
   useEffect(() => {
     const transformer = transformerRef.current;
     if (!transformer) {
@@ -391,12 +551,36 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
       : selectedLayerIds
           .map((id) => {
             const layer = design.layers.find((entry) => entry.id === id);
-            return layer?.visible ? nodesRef.current.get(id) : undefined;
+            return layer?.visible && !layer.locked ? nodesRef.current.get(id) : undefined;
           })
           .filter((node): node is Konva.Node => Boolean(node));
     transformer.nodes(nodes);
     transformer.getLayer()?.batchDraw();
   }, [selectedLayerIds, design.layers, editingTextLayerId]);
+
+  // The hover box is a transient pointer aid: drop it on zoom and whenever the
+  // selection changes (a freshly clicked layer shows the real transformer).
+  useEffect(() => {
+    setHoverBox(null);
+  }, [scale, selectedLayerIds]);
+
+  // Padlock badge for a single locked selection: an accent selection frame
+  // (no anchors) plus an unlock button pinned to its top-right corner
+  // (overlay layer — never exported). Constant screen size at any zoom.
+  const [lockBadge, setLockBadge] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    const layer =
+      selectedLayerIds.length === 1 && !editingTextLayerId
+        ? design.layers.find((entry) => entry.id === selectedLayerIds[0])
+        : undefined;
+    const node = layer?.locked ? nodesRef.current.get(layer.id) : undefined;
+    if (!layer || !node) {
+      setLockBadge(null);
+      return;
+    }
+    const rect = node.getClientRect({ skipShadow: true });
+    setLockBadge({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+  }, [selectedLayerIds, design.layers, editingTextLayerId, scale]);
 
   // While a text layer is being edited in place, hide its Konva node (the
   // textarea overlay takes over) and restore it afterwards. Curved text stays
@@ -509,6 +693,8 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
       selectLayer(null);
     }
     const start = { x: pointer.x, y: pointer.y };
+    hoverSuppressRef.current += 1;
+    setHoverBox(null);
 
     const onMove = (ev: MouseEvent) => {
       const containerRect = stage.container().getBoundingClientRect();
@@ -528,6 +714,7 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
     const onUp = (ev: MouseEvent) => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      hoverSuppressRef.current = Math.max(0, hoverSuppressRef.current - 1);
       const marquee = marqueeRectRef.current;
       if (!marquee) {
         return;
@@ -549,7 +736,7 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
         return; // plain click — already deselected above
       }
       const hit = design.layers
-        .filter((layer) => layer.visible)
+        .filter((layer) => layer.visible && !layer.locked)
         .filter((layer) => {
           const node = nodesRef.current.get(layer.id);
           if (!node) {
@@ -711,6 +898,86 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
               ))}
             </Layer>
             <Layer>
+              {hoverBox && (
+                <Rect
+                  x={hoverBox.x}
+                  y={hoverBox.y}
+                  width={hoverBox.width}
+                  height={hoverBox.height}
+                  stroke={accentColor}
+                  strokeWidth={1 / scale}
+                  listening={false}
+                />
+              )}
+              {lockBadge && (
+                <>
+                  <Rect
+                    x={lockBadge.x}
+                    y={lockBadge.y}
+                    width={lockBadge.width}
+                    height={lockBadge.height}
+                    stroke={accentColor}
+                    strokeWidth={1.5 / scale}
+                    listening={false}
+                  />
+                  <Group
+                    x={lockBadge.x + lockBadge.width + 8 / scale}
+                    y={lockBadge.y - 8 / scale}
+                    onClick={(e) => {
+                      e.cancelBubble = true;
+                      useEditorStore.getState().toggleLockSelected();
+                    }}
+                    onTap={(e) => {
+                      e.cancelBubble = true;
+                      useEditorStore.getState().toggleLockSelected();
+                    }}
+                    onMouseEnter={(e) => {
+                      const container = e.target.getStage()?.container();
+                      if (container) {
+                        container.style.cursor = "pointer";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      const container = e.target.getStage()?.container();
+                      if (container) {
+                        container.style.cursor = "";
+                      }
+                    }}
+                  >
+                    <Rect
+                      width={26 / scale}
+                      height={26 / scale}
+                      offsetX={13 / scale}
+                      offsetY={13 / scale}
+                      cornerRadius={7 / scale}
+                      fill={accentColor}
+                      shadowColor="#000000"
+                      shadowBlur={3 / scale}
+                      shadowOffsetY={1 / scale}
+                      shadowOpacity={0.3}
+                    />
+                    <Rect
+                      x={-5 / scale}
+                      y={-1 / scale}
+                      width={10 / scale}
+                      height={8 / scale}
+                      cornerRadius={2 / scale}
+                      fill="#ffffff"
+                      listening={false}
+                    />
+                    <Arc
+                      y={-1 / scale}
+                      innerRadius={3.5 / scale}
+                      outerRadius={3.5 / scale}
+                      angle={180}
+                      rotation={180}
+                      stroke="#ffffff"
+                      strokeWidth={2.2 / scale}
+                      listening={false}
+                    />
+                  </Group>
+                </>
+              )}
               <Rect
                 ref={marqueeRectRef}
                 visible={false}
@@ -747,6 +1014,7 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
                 enabledAnchors={enabledAnchors}
                 anchorStyleFunc={anchorStyleFunc}
                 onTransformStart={onTransformStart}
+                onTransform={onTransform}
                 onTransformEnd={onTransformEnd}
                 anchorSize={8}
                 anchorStroke={accentColor}

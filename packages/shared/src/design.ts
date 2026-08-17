@@ -26,6 +26,9 @@ interface LayerBase {
   visible: boolean;
   /** Group membership; layers sharing a groupId form a contiguous run. */
   groupId?: string;
+  /** Locked layers: selectable but frozen — no transform/drag/nudge/delete/
+   *  z-order/property edits, and marquee selection skips them. */
+  locked?: boolean;
 }
 
 /** Mutually-exclusive text effects (Canva model: one effect or none). */
@@ -90,6 +93,9 @@ export interface ImageLayer extends LayerBase {
   height: number;
   /** Source-space crop rect (px in the original image). Absent = full image. */
   crop?: ImageCrop;
+  /** True when the asset is an isolated-subject cutout (from remove-background
+   *  or text-behind-subject) — subject extraction is meaningless on it. */
+  cutout?: boolean;
   shadow: ShadowEffect;
 }
 
@@ -120,6 +126,8 @@ export interface ShapeLayer extends LayerBase {
   width: number;
   height: number;
   fill: string;
+  /** Rounded corners (px). Optional/0 = sharp; meaningless on circles. */
+  cornerRadius?: number;
   stroke: StrokeEffect;
   shadow: ShadowEffect;
 }

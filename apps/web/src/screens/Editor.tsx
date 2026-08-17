@@ -90,6 +90,13 @@ export function Editor({ designId }: { designId: string }) {
         }
         return;
       }
+      // Cmd/Ctrl+Shift+L toggles layer locking (plain Cmd+L is the browser's
+      // omnibox shortcut and can't be intercepted).
+      if (mod && e.shiftKey && e.key.toLowerCase() === "l" && hasSelection) {
+        e.preventDefault();
+        state.toggleLockSelected();
+        return;
+      }
       if (e.key === "Escape" && state.editingGroupId) {
         // Leave the entered group: back to group-level selection.
         const groupId = state.editingGroupId;

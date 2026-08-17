@@ -30,7 +30,7 @@ export function ContextBar() {
   const selectionHasGroup = selectedGroupIds.size > 0;
   const allSameGroup = multi && selectedGroupIds.size === 1 && selectedLayers.every((entry) => entry.groupId);
 
-  if (!layer || editingTextLayerId) {
+  if (!layer || editingTextLayerId || layer.locked) {
     return null;
   }
 

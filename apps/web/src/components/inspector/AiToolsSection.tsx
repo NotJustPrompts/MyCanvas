@@ -42,17 +42,19 @@ export function AiToolsSection({ layer }: SectionProps<ImageLayer>) {
       >
         {label}
       </button>
-      <button
-        type="button"
-        className="secondary block"
-        disabled={busy}
-        title="Place the subject cutout above the topmost text layer"
-        onClick={() => {
-          void textBehindSubject(layer);
-        }}
-      >
-        Text behind subject
-      </button>
+      {!layer.cutout && (
+        <button
+          type="button"
+          className="secondary block"
+          disabled={busy}
+          title="Place the subject cutout above the topmost text layer"
+          onClick={() => {
+            void textBehindSubject(layer);
+          }}
+        >
+          Text behind subject
+        </button>
+      )}
       <button
         type="button"
         className="secondary block"

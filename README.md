@@ -1,8 +1,15 @@
-# mycanva
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg" />
+    <img src="brand/logo-light.svg" alt="MyCanvas" width="420" />
+  </picture>
+</p>
 
-A local-first, Canva-lite thumbnail designer. Put text with real fonts and effects
-(glow, shadow, stroke) over images, drop in shapes and logos, and export to PNG/JPG.
-No subscription, no cloud — projects live as JSON on your disk.
+<p align="center">
+  A local-first, Canva-lite thumbnail designer. Put text with real fonts and effects<br />
+  (glow, shadow, stroke) over images, drop in shapes and logos, and export to PNG/JPG.<br />
+  No subscription, no cloud — projects live as JSON on your disk.
+</p>
 
 ## Quick start
 

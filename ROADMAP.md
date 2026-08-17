@@ -157,6 +157,38 @@ Canva reference screenshots live in `reference/` (git-ignored).
   with the depth map cached per asset+crop — no second inference on strength
   change. Fixed a SliderField double-commit bug (Enter+blur) found in testing.
 
+### v2.4.1 — interaction fixes
+
+- Middle-anchor drags preview live: images show the real crop growing, text
+  re-wraps in place (per-frame "resize, don't scale" baking, `bakeMiddleTransform`
+  in CanvasStage) — no more distorted stretch; commit on release, one undo step.
+- Text-behind-subject (and remove-bg) cutouts are trimmed to their alpha bbox
+  (+2px) before upload, positioned pixel-exact through the source's
+  scale/rotation — layers underneath are clickable again.
+- Edit-in-place overlay no longer re-wraps text: auto-width layers use
+  `white-space: pre` + `wrap="off"` with live horizontal growth measured by a
+  scratch `Konva.Text` (same metrics as the renderer); fixed-width overlays get a
+  caret/letter-spacing buffer. Overlay focus frame CSS fixed (was being
+  out-specified by a global `textarea:focus` rule).
+- "Text behind subject" is no longer offered on cutout layers: `ImageLayer`
+  gains optional `cutout?: boolean`, stamped by both text-behind-subject and
+  remove-background; the action hides from the inspector/context menu and is
+  guarded programmatically.
+
+### v2.4 — rebrand to MyCanvas
+
+- New brand from the user's logo PNG: hand-fitted `brand/icon.svg` (navy #162231
+  rounded square, orange #fa7339 brush capsule + paint blob, clipPath corner
+  clipping, pixel-compared against the source), `icon-dark.svg` (light-square
+  variant), and `logo-light/dark.svg` lockups with the "MyCanvas" wordmark as
+  Poppins SemiBold vector paths (GitHub-safe, no external font refs).
+- App: `Brand.tsx` renders icon + Poppins wordmark, theme-aware; `<title>` +
+  favicon (SVG + 64px PNG fallback); visible "mycanva" strings replaced.
+  Internal identifiers (`@mycanva/*` packages, repo folder, localStorage keys,
+  data dir) intentionally unchanged.
+- README: centered `<picture>` header (dark/light lockup via
+  `prefers-color-scheme`) above the tagline.
+
 ### v2.3 — inspector panel system (refactor)
 
 - The properties sidebar is now a container of composable, collapsible panels:
@@ -169,6 +201,38 @@ Canva reference screenshots live in `reference/` (git-ignored).
   Pure refactor, zero behavior change.
 - Defaults: Effects/Shadow/Stroke open iff active; everything else expanded;
   collapse state resets on layer switch (deliberate).
+
+### Layer locking (unreleased, post-2.0)
+
+- `locked?: boolean` on LayerBase (optional → no migration). Locked layers stay
+  selectable by click but are frozen: no drag/transformer/nudge/z-order/delete,
+  marquee skips them entirely. Store-level guards in updateLayer/updateLayers
+  (only `locked` patches pass), removeLayer(s) (locked filtered out),
+  moveSelectedLayers (locked ids excluded; unlocked layers still pass them).
+- UX: padlock badge on the selection frame (overlay layer, click = unlock),
+  Lock/Unlock in the context menu and layers panel (persistent padlock on
+  locked rows), inspector renders inert (pointer-events none + dimmed) under a
+  lock notice with an Unlock button, ContextBar suppressed. Shortcut is
+  **Cmd/Ctrl+Shift+L** — plain Cmd+L is the browser omnibox and can't be
+  intercepted (verified firing in Playwright).
+- Groups: the flag is per-layer and rides through group/ungroup/copy/paste/
+  duplicate as plain layer data. A locked member inside a moved group simply
+  stays behind (its write-back is filtered) — documented edge case.
+
+### Cutout trim fix + shape corner radius (unreleased, post-2.0)
+
+- Trim fix: `trimCutout` scanned for alpha > 0, but RMBG masks leave faint
+  residue (alpha 1–8, ~6–12 px/column) that can reach the frame edges —
+  extending the bbox (user saw the right edge untrimmed). Now: alpha > 8 plus
+  a minimum column/row mass of 2 pixels. Verified no over-trim of wispy hair.
+- `cornerRadius?: number` on ShapeLayer (optional → no migration). Shapes
+  render through `roundedPolygonPath` (utils/rounded-path.ts): per-corner
+  radius clamped to half the shorter adjacent edge, quadratic joins.
+  Semicircle is sampled to a 64-point polyline so the same helper rounds its
+  two chord corners while the arc stays exact. Circle excluded (no UI field).
+- Also fixed a pre-existing bug found during verification: circle layers
+  ignored layer x/y (Ellipse x/y after the prop spread overrode it) — circles
+  now render inside a Group like text nodes do.
 
 ## Queued
 
@@ -430,6 +494,13 @@ model is the v1.6 middle-anchor crop, not Canva frames — a lighter version cou
 auto-center the detected subject inside the current crop rect. Low priority until
 real frames/masks exist.
 
+### Future — local generative model integration (user note)
+
+The user runs local image models (Flux 2, Krea, others). A later integration could
+generate images directly into Uploads from a prompt — design TBD with the user
+(server-side proxy to the local runtime vs. direct calls; where generation UI
+lives). Not started; parking L/M/N confirmed by the user.
+
 ## Working agreements
 
 - ~~No git mutations until the user asks. Milestone: bump to 2.0 + commit~~ **Done
@@ -443,6 +514,37 @@ real frames/masks exist.
   distance, blur, thickness, spread, roundness) get the Canva-style slider +
   synced numeric stepper combo (− value +); precise fields (font size, X/Y,
   dims) keep plain inputs. Extend SliderField, keep transient-commit.
+- ~~Post-v2.3 fixes (user-reported): (a) middle-anchor drags need real-time preview
+  for images AND text — image currently shows a distorted stretch until release
+  (v1.6 nit), text should re-wrap live while dragging instead of on commit;
+  (b) the text-behind-subject cutout layer must be trimmed to its content bounds
+  (alpha bbox), not the full source frame — a full-frame transparent layer blocks
+  selecting anything underneath it.~~ **Done** (unreleased, post-2.0): (a) the
+  transformer bakes scale into crop/wrap width on every `transform` frame
+  (`bakeMiddleTransform` in CanvasStage) and commits once at `transformend`;
+  (b) `produceCutout` trims the cutout PNG to its alpha bbox (+2px) and both
+  callers map the trimmed layer back through the source's scale/rotation.
+- ~~Queued small item (user-requested): **hover preview box**~~ **Done**
+  (unreleased, post-2.0): hover shows the layer's `getClientRect` outline in
+  the overlay layer (accent hairline, `listening: false`, never exported).
+  Group members box the whole group (what a click selects); inside an entered
+  group, the member. Suppressed while dragging/marquee-ing/transforming, for
+  selected layers, and cleared on zoom/selection change. Locked layers get the
+  plain box (recognition aid).
+- ~~Queued bug (user-reported): **corner-scale then mid-drag makes text jump
+  huge.**~~ **Done**: `bakeMiddleTransform` now applies the transformer's
+  per-frame scale *delta* relative to the drag-start scale
+  (`transformBaseScaleRef`, captured at transformstart) and restores the node
+  scale after each bake — wrapWidth/crop are computed in unscaled units
+  (visual ÷ baseScale), so a corner-scaled layer never re-renders at its
+  stored font size. Commits read scale back from the node instead of forcing
+  1. Rect/shape middles keep the old normalize-to-1 bake (uniform fill is
+  scale-invariant; inspector shows true dims; stroked shapes renormalize
+  stroke strength — pre-existing semantics, documented in code).
+- ~~Queued verification (user-requested): re-run the cutout-trim check with the
+  USER'S real image `47cd6e81f194f81c.png` in a throwaway design~~ **Done**:
+  cutout bbox hugged the subject (right edge trimmed ~220 display px of empty
+  frame); throwaway design + generated assets deleted afterwards.
 - Every UI change: Playwright screenshots in both themes, self-reviewed, then final review
   by the orchestrator. `npm run check` + `npm run build` stay green.
 - Never touch the user's real design `c6857deda3f89d2d` / asset `47cd6e81f194f81c.png`

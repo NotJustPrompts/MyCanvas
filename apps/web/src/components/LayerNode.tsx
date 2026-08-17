@@ -14,6 +14,7 @@ import {
 import { useImage } from "../hooks/useImage";
 import { useEditorStore } from "../store/editorStore";
 import { ensureFontLoaded } from "../utils/fonts";
+import { roundedPolygonPath, semicirclePoints } from "../utils/rounded-path";
 
 interface LayerNodeProps {
   layer: Layer;
@@ -74,7 +75,8 @@ function useCommonNodeProps(layer: Layer, registerRef: (id: string, node: Konva.
     rotation: layer.rotation,
     opacity: layer.opacity,
     visible: layer.visible,
-    draggable: true,
+    // Locked layers stay clickable (selection) but can't be dragged.
+    draggable: !layer.locked,
     onMouseDown: (e: Konva.KonvaEventObject<MouseEvent>) => {
       handlePress(layer.id, e.evt.shiftKey);
     },
@@ -428,23 +430,38 @@ function ShapeNode({ layer, registerRef }: { layer: ShapeLayer } & LayerNodeProp
   };
   const w = layer.width;
   const h = layer.height;
+  const radius = layer.cornerRadius ?? 0;
   switch (layer.shape) {
     case "circle":
-      return <Ellipse {...shared} x={w / 2} y={h / 2} radiusX={w / 2} radiusY={h / 2} />;
+      // Grouped so the node origin stays the layer box's top-left (Ellipse
+      // x/y is its center; an explicit x after the spread would override the
+      // layer position).
+      return (
+        <Group ref={setRefs} {...common}>
+          <Ellipse
+            x={w / 2}
+            y={h / 2}
+            radiusX={w / 2}
+            radiusY={h / 2}
+            fill={layer.fill}
+            {...strokeProps(layer.stroke)}
+            {...shadowProps(layer.shadow)}
+          />
+        </Group>
+      );
     case "triangle":
-      return <Line points={[w / 2, 0, w, h, 0, h]} closed {...shared} />;
+      return <Path data={roundedPolygonPath([w / 2, 0, w, h, 0, h], radius)} {...shared} />;
     case "hexagon":
       return (
-        <Line
-          points={[w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2]}
-          closed
+        <Path
+          data={roundedPolygonPath([w * 0.25, 0, w * 0.75, 0, w, h / 2, w * 0.75, h, w * 0.25, h, 0, h / 2], radius)}
           {...shared}
         />
       );
     case "star":
-      return <Line points={starPoints(w, h)} closed {...shared} />;
+      return <Path data={roundedPolygonPath(starPoints(w, h), radius)} {...shared} />;
     case "semicircle":
-      return <Path data={`M 0 ${String(h)} A ${String(w / 2)} ${String(h)} 0 0 1 ${String(w)} ${String(h)} Z`} {...shared} />;
+      return <Path data={roundedPolygonPath(semicirclePoints(w, h), radius)} {...shared} />;
   }
 }
 

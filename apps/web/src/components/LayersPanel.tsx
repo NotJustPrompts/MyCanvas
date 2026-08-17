@@ -47,6 +47,22 @@ function LinkIcon() {
   );
 }
 
+function LockIcon({ locked }: { locked: boolean }) {
+  return locked
+    ? (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <rect x="4" y="11" width="16" height="10" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      )
+    : (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <rect x="4" y="11" width="16" height="10" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 7.9-1" />
+        </svg>
+      );
+}
+
 interface GroupBlock {
   kind: "group";
   groupId: string;
@@ -177,6 +193,17 @@ export function LayersPanel() {
       >
         <EyeIcon visible={layer.visible} />
       </button>
+      <button
+        type="button"
+        className={layer.locked ? "icon-button lock-toggle active" : "icon-button lock-toggle"}
+        title={layer.locked ? "Unlock layer" : "Lock layer"}
+        onClick={(e) => {
+          e.stopPropagation();
+          updateLayer(layer.id, { locked: !layer.locked });
+        }}
+      >
+        <LockIcon locked={layer.locked ?? false} />
+      </button>
       <span className="layer-type">{TYPE_LABELS[layer.type]}</span>
       {layer.groupId && <LinkIcon />}
       {renamingId === layer.id
@@ -250,17 +277,19 @@ export function LayersPanel() {
         >
           ⧉
         </button>
-        <button
-          type="button"
-          className="icon-button danger"
-          title="Delete layer"
-          onClick={(e) => {
-            e.stopPropagation();
-            removeLayer(layer.id);
-          }}
-        >
-          ×
-        </button>
+        {!layer.locked && (
+          <button
+            type="button"
+            className="icon-button danger"
+            title="Delete layer"
+            onClick={(e) => {
+              e.stopPropagation();
+              removeLayer(layer.id);
+            }}
+          >
+            ×
+          </button>
+        )}
       </span>
     </li>
   );

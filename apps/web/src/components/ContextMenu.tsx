@@ -146,7 +146,7 @@ export function ContextMenu() {
             {bgRemovalBusy ? "Removing background…" : "Remove background"}
           </button>
         )}
-        {layer.type === "image" && (
+        {layer.type === "image" && !layer.cutout && (
           <button
             type="button"
             role="menuitem"
@@ -166,9 +166,23 @@ export function ContextMenu() {
             Portrait mode
           </button>
         )}
-        <button type="button" role="menuitem" onClick={() => { run(removeSelectedLayers); }}>
-          Delete
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            run(() => {
+              updateLayer(layer.id, { locked: !layer.locked });
+            });
+          }}
+        >
+          {layer.locked ? "Unlock" : "Lock"}
+          <kbd>⌘⇧L</kbd>
         </button>
+        {!layer.locked && (
+          <button type="button" role="menuitem" onClick={() => { run(removeSelectedLayers); }}>
+            Delete
+          </button>
+        )}
         <div className="context-menu-divider" />
         {selectedLayerIds.length > 1 && (
           <button type="button" role="menuitem" onClick={() => { run(groupSelection); }}>
@@ -182,28 +196,34 @@ export function ContextMenu() {
             <kbd>Cmd+Shift+G</kbd>
           </button>
         )}
-        <div className={position.flipX ? "context-submenu-anchor flip" : "context-submenu-anchor"}>
-          <button type="button" role="menuitem" className="context-submenu-trigger">
-            Align to page
-            <span className="caret">›</span>
-          </button>
-          <div className="context-submenu" role="menu">
-            <button type="button" role="menuitem" onClick={() => { align("x", "min"); }}>Left</button>
-            <button type="button" role="menuitem" onClick={() => { align("x", "center"); }}>Center</button>
-            <button type="button" role="menuitem" onClick={() => { align("x", "max"); }}>Right</button>
-            <div className="context-menu-divider" />
-            <button type="button" role="menuitem" onClick={() => { align("y", "min"); }}>Top</button>
-            <button type="button" role="menuitem" onClick={() => { align("y", "center"); }}>Middle</button>
-            <button type="button" role="menuitem" onClick={() => { align("y", "max"); }}>Bottom</button>
+        {!layer.locked && (
+          <div className={position.flipX ? "context-submenu-anchor flip" : "context-submenu-anchor"}>
+            <button type="button" role="menuitem" className="context-submenu-trigger">
+              Align to page
+              <span className="caret">›</span>
+            </button>
+            <div className="context-submenu" role="menu">
+              <button type="button" role="menuitem" onClick={() => { align("x", "min"); }}>Left</button>
+              <button type="button" role="menuitem" onClick={() => { align("x", "center"); }}>Center</button>
+              <button type="button" role="menuitem" onClick={() => { align("x", "max"); }}>Right</button>
+              <div className="context-menu-divider" />
+              <button type="button" role="menuitem" onClick={() => { align("y", "min"); }}>Top</button>
+              <button type="button" role="menuitem" onClick={() => { align("y", "center"); }}>Middle</button>
+              <button type="button" role="menuitem" onClick={() => { align("y", "max"); }}>Bottom</button>
+            </div>
           </div>
-        </div>
+        )}
         <div className="context-menu-divider" />
-        <button type="button" role="menuitem" onClick={() => { run(() => { moveSelectedLayers(1); }); }}>
-          Bring forward
-        </button>
-        <button type="button" role="menuitem" onClick={() => { run(() => { moveSelectedLayers(-1); }); }}>
-          Send backward
-        </button>
+        {!layer.locked && (
+          <>
+            <button type="button" role="menuitem" onClick={() => { run(() => { moveSelectedLayers(1); }); }}>
+              Bring forward
+            </button>
+            <button type="button" role="menuitem" onClick={() => { run(() => { moveSelectedLayers(-1); }); }}>
+              Send backward
+            </button>
+          </>
+        )}
       </div>
     </>
   );
