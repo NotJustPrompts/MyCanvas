@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store/editorStore";
-import { removeLayerBackground } from "../utils/bg-removal";
+import { removeLayerBackground, textBehindSubject } from "../utils/bg-removal";
+import { applyPortraitMode, getPortraitInfo } from "../utils/portrait-mode";
 import { getLayerNode } from "../utils/canvas-bridge";
 
 type AlignMode = "min" | "center" | "max";
@@ -143,6 +144,26 @@ export function ContextMenu() {
             onClick={() => { run(() => { void removeLayerBackground(layer); }); }}
           >
             {bgRemovalBusy ? "Removing background…" : "Remove background"}
+          </button>
+        )}
+        {layer.type === "image" && (
+          <button
+            type="button"
+            role="menuitem"
+            disabled={bgRemovalBusy}
+            onClick={() => { run(() => { void textBehindSubject(layer); }); }}
+          >
+            Text behind subject
+          </button>
+        )}
+        {layer.type === "image" && (
+          <button
+            type="button"
+            role="menuitem"
+            disabled={bgRemovalBusy}
+            onClick={() => { run(() => { void applyPortraitMode(layer, getPortraitInfo(layer.asset)?.strength ?? 12); }); }}
+          >
+            Portrait mode
           </button>
         )}
         <button type="button" role="menuitem" onClick={() => { run(removeSelectedLayers); }}>

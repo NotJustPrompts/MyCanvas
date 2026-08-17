@@ -132,6 +132,44 @@ Canva reference screenshots live in `reference/` (git-ignored).
   slider+numeric combos (transient drag, one history entry per commit); precise
   fields (font size, X/Y, dims, rotation) stay plain inputs.
 
+### v2.0
+
+- Milestone commit (`6f4a6ca`): versions bumped to 2.0.0, everything committed.
+
+### v2.1 — text-behind-subject (Pass J)
+
+- "Text behind subject" action on image layers (inspector button + context menu):
+  reuses the RMBG-1.4 worker via a shared `produceCutout(layer)` helper, saves the
+  subject cutout as a new asset, and inserts it as a "Subject cutout" image layer
+  at the source's exact geometry, directly above the topmost text layer above the
+  image (top of stack if none). One undoable step (`addLayerAt`), auto-selected.
+- Static copy by design: edits to the source don't re-sync the cutout.
+
+### v2.2 — portrait mode (Pass K)
+
+- "Portrait mode" on image layers (inspector + context menu): DepthAnything v2
+  small (`depth-estimation`) in the same Web Worker as Pass F/J (job kinds
+  `cutout`/`depth`), WebGPU → WASM fallback, download progress in the button.
+- Banded bokeh composite on 2D canvas (sharp/mid/far, smoothstepped feathered
+  depth bands); result uploaded as a new asset and swapped in — one undo step,
+  original asset stays in Uploads (reversible).
+- Strength slider combo (0–40, default 12) re-composites from the ORIGINAL asset
+  with the depth map cached per asset+crop — no second inference on strength
+  change. Fixed a SliderField double-commit bug (Enter+blur) found in testing.
+
+### v2.3 — inspector panel system (refactor)
+
+- The properties sidebar is now a container of composable, collapsible panels:
+  reusable `Panel` primitive (chevron header, subtle separators, optional
+  `headerRight` slot — Shadow/Stroke enable checkboxes live there), pure
+  composition in `Inspector.tsx` per layer type.
+- `Inspector.tsx` split into `components/inspector/`: one file per section
+  (Position, Text content, Layout, Text effects, Image, AI tools, Shape/Line,
+  Shadow/Stroke) + shared `fields.tsx` (NumberField, SliderField, ColorField).
+  Pure refactor, zero behavior change.
+- Defaults: Effects/Shadow/Stroke open iff active; everything else expanded;
+  collapse state resets on layer switch (deliberate).
+
 ## Queued
 
 Order: B → C+D → F → G → H → I → E. (A and B already shipped; F–I are
@@ -342,12 +380,62 @@ shadow/stroke toggles on text layers).
 - **Edit-in-place**: effect suspended while typing, reapplied on commit (the
   overlay is already flat text).
 
+### Pass J — text-behind-subject (from IDEAS.md #2)
+
+The editorial "magazine depth" effect — heading sits behind the photo's subject
+but in front of its background. Reuses the Pass F RMBG-1.4 worker pipeline
+as-is (same model, same cache), so this is mostly layer orchestration.
+
+- **UX**: with an image layer selected, a "Text behind subject" action (ContextBar /
+  context menu / image inspector). The app generates the subject cutout of that
+  image and inserts it as a new image layer ("Subject cutout") at the exact same
+  x/y/size/rotation, placed directly above the topmost text layer that sits above
+  the source image — producing the sandwich: original image < text < cutout.
+- The cutout goes through the normal asset pipeline (new asset, PNG with alpha),
+  so it survives reload/export like anything else.
+- Compromise (document): the cutout is a static copy — moving/editing the source
+  image afterwards does not re-sync it (delete + re-run to refresh).
+
+### Pass K — portrait mode / depth bokeh (from IDEAS.md #5)
+
+One-click DSLR-style background blur on an image layer.
+
+- **Model**: `onnx-community/depth-anything-v2-small` via transformers.js
+  `depth-estimation` pipeline, in the same Web Worker pattern as Pass F
+  (dynamic import, download progress, browser-cache persistence, WASM fallback).
+- **Composite (keep it simple, 2D canvas — no custom WebGL shader)**: render the
+  image at 2–3 blur levels (canvas `ctx.filter = blur(Npx)`), band them by depth
+  thresholds with a feathered mask edge, output one flattened PNG asset that
+  replaces the layer's asset (original kept in Uploads, so it's reversible by
+  re-adding). Strength slider = max blur radius.
+- If per-pixel variable blur proves cheap via a Konva custom filter later, upgrade
+  then; the banded composite is the v1.
+
+### Pass L — magic eraser / inpainting (from IDEAS.md #1) — parked
+
+Needs a brush-mask UI over the image plus LaMa-style inpainting. LaMa is **not** a
+supported transformers.js architecture, so this means adding `onnxruntime-web` and
+custom pre/post-processing — a second inference stack. Revisit when the user asks
+for it; brush UI alone is a meaningful chunk.
+
+### Pass M — AI upscaling (from IDEAS.md #4) — parked
+
+Real-ESRGAN via `onnxruntime-web` (not transformers.js), tiled inference for large
+images, keep node w/h so exports get sharper. Same second-stack cost as Pass L.
+
+### Pass N — smart crop / subject-aware framing (from IDEAS.md #3) — parked
+
+Needs subject detection (MediaPipe face detector or a YOLO-nano ONNX). Our crop
+model is the v1.6 middle-anchor crop, not Canva frames — a lighter version could
+auto-center the detected subject inside the current crop rect. Low priority until
+real frames/masks exist.
+
 ## Working agreements
 
-- No git mutations until the user asks. **Milestone: when all queued passes
-  (F, G, H, I, E) are done, bump version to 2.0, commit everything (user explicitly
-  authorized this commit), then review IDEAS.md/ideas.md, promote feasible ideas
-  here and implement them.**
+- ~~No git mutations until the user asks. Milestone: bump to 2.0 + commit~~ **Done
+  (commit `6f4a6ca`, all package.jsons at 2.0.0).** IDEAS.md reviewed: J + K
+  promoted and queued for implementation; L/M/N parked (need a second inference
+  stack — onnxruntime-web — or frames that don't exist yet).
 - Known issue to fix post-E (user-reported): applying curve to multiline text
   flattens the lines but the layer box doesn't resize to the flattened content,
   clipping it. Recompute bounds from the TextPath on curve/content change.

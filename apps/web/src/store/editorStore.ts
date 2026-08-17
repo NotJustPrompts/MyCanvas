@@ -52,6 +52,8 @@ export interface EditorStore {
   setName: (name: string) => void;
   setBackground: (background: string, transient?: boolean) => void;
   addLayer: (layer: Layer) => void;
+  /** Insert a layer at a z-index, select it, one history entry. */
+  addLayerAt: (layer: Layer, index: number) => void;
   addImageLayer: (asset: string, naturalWidth: number, naturalHeight: number) => void;
   addImageLayerAt: (
     asset: string,
@@ -70,9 +72,9 @@ export interface EditorStore {
   contextMenu: { x: number; y: number; layerId: string } | null;
   openContextMenu: (menu: { x: number; y: number; layerId: string }) => void;
   closeContextMenu: () => void;
-  /** Active background-removal job: download progress (0–1) or null = inference. */
-  bgRemoval: { layerId: string; progress: number | null } | null;
-  setBgRemoval: (value: { layerId: string; progress: number | null } | null) => void;
+  /** Active worker job: download progress (0–1) or null = inference/composite. */
+  bgRemoval: { layerId: string; progress: number | null; kind: "cutout" | "portrait" } | null;
+  setBgRemoval: (value: { layerId: string; progress: number | null; kind: "cutout" | "portrait" } | null) => void;
   /** Minimal transient toast message. */
   toast: string | null;
   showToast: (message: string) => void;
@@ -320,6 +322,15 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
 
     addLayer: (layer) => {
       mutate((design) => ({ layers: [...design.layers, layer] }), false);
+      set({ selectedLayerIds: [layer.id] });
+    },
+
+    addLayerAt: (layer, index) => {
+      mutate((design) => {
+        const layers = [...design.layers];
+        layers.splice(Math.max(0, Math.min(index, layers.length)), 0, layer);
+        return { layers };
+      }, false);
       set({ selectedLayerIds: [layer.id] });
     },
 

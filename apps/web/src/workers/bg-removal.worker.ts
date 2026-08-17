@@ -9,6 +9,8 @@ import { AutoConfig, RawImage, pipeline } from "@huggingface/transformers";
 
 interface JobMessage {
   jobId: number;
+  /** Job kind: subject cutout (default) or depth-map estimation. */
+  kind?: "cutout" | "depth";
   width: number;
   height: number;
   buffer: ArrayBuffer;
@@ -76,6 +78,36 @@ function getSegmenter(jobId: number): Promise<Segmenter> {
   return segmenterPromise;
 }
 
+type DepthEstimator = (image: RawImage) => Promise<{ depth: RawImage }>;
+
+let depthPromise: Promise<DepthEstimator> | null = null;
+
+function getDepthEstimator(jobId: number): Promise<DepthEstimator> {
+  depthPromise ??= (async () => {
+    const progressCallback = (info: ProgressInfo) => {
+      if (info.status === "download" || info.status === "progress") {
+        reply({
+          jobId,
+          type: "progress",
+          progress: typeof info.progress === "number" ? info.progress / 100 : 0,
+        });
+      }
+    };
+    try {
+      return await pipeline("depth-estimation", "onnx-community/depth-anything-v2-small", {
+        device: "webgpu",
+        progress_callback: progressCallback,
+      });
+    } catch {
+      return await pipeline("depth-estimation", "onnx-community/depth-anything-v2-small", {
+        device: "wasm",
+        progress_callback: progressCallback,
+      });
+    }
+  })();
+  return depthPromise;
+}
+
 /** Mask at arbitrary resolution → grayscale bytes at the target resolution. */
 function resizeMask(mask: RawImage, width: number, height: number): Uint8Array | Uint8ClampedArray {
   if (mask.width === width && mask.height === height) {
@@ -112,7 +144,28 @@ function resizeMask(mask: RawImage, width: number, height: number): Uint8Array |
 }
 
 scope.onmessage = (event) => {
-  const { jobId, width, height, buffer } = event.data;
+  const { jobId, width, height, buffer, kind } = event.data;
+  if (kind === "depth") {
+    void (async () => {
+      try {
+        const estimator = await getDepthEstimator(jobId);
+        reply({ jobId, type: "progress", progress: null });
+        const input = new RawImage(new Uint8ClampedArray(buffer), width, height, 4);
+        const result = await estimator(input);
+        const depth = resizeMask(result.depth, width, height);
+        const out = new Uint8ClampedArray(depth);
+        reply({ jobId, type: "depth-done", width, height, buffer: out.buffer }, [out.buffer]);
+      } catch (error) {
+        reply({
+          jobId,
+          type: "error",
+          code: "failed",
+          message: error instanceof Error ? error.message : "unknown error",
+        });
+      }
+    })();
+    return;
+  }
   void (async () => {
     try {
       const segmenter = await getSegmenter(jobId);
