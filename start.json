@@ -12,6 +12,12 @@
           }
         ]
       }
+    },
+    {
+      "method": "local.set",
+      "params": {
+        "url": "{{input.event[0]}}"
+      }
     }
   ]
 }
