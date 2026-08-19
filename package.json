@@ -20,6 +20,14 @@
   "engines": {
     "node": ">=22"
   },
+  "overrides": {
+    "@huggingface/transformers": {
+      "sharp": "^0.35.3",
+      "onnxruntime-node": {
+        "adm-zip": "^0.6.0"
+      }
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@stylistic/eslint-plugin": "^5.10.0",
