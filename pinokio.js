@@ -1,5 +1,5 @@
 module.exports = {
-  version: "3.7",
+  version: "7.0",
   title: "MyCanvas",
   description: "A local-first thumbnail designer: text, effects, shapes and images over a canvas, exported to PNG/JPG.",
   icon: "brand/icon.svg",
@@ -13,17 +13,19 @@ module.exports = {
 
     if (running.install) {
       return [{
-        default: "install.json",
+        default: true,
         icon: "fa-solid fa-plug",
-        text: "Installing...",
+        text: "Installing",
+        href: "install.json",
       }];
     }
 
-    if (running.update) {
+    if (!installed) {
       return [{
-        default: "update.json",
-        icon: "fa-solid fa-terminal",
-        text: "Updating...",
+        default: true,
+        icon: "fa-solid fa-plug",
+        text: "Install",
+        href: "install.json",
       }];
     }
 
@@ -31,42 +33,46 @@ module.exports = {
       const local = info.local("start.json");
       if (local && local.url) {
         return [{
-          default: local.url,
+          icon: "fa-solid fa-power-off",
+          text: "Server",
+          href: "start.json",
+        }, {
+          default: true,
           icon: "fa-solid fa-rocket",
           text: "Open Web UI",
-        }, {
-          icon: "fa-solid fa-terminal",
-          text: "Terminal",
-          href: "start.json",
+          href: local.url,
         }];
       }
       return [{
-        icon: "fa-solid fa-terminal",
-        text: "Terminal",
+        default: true,
+        icon: "fa-solid fa-power-off",
+        text: "Server",
         href: "start.json",
       }];
     }
 
-    if (installed) {
+    if (running.update) {
       return [{
-        default: "start.json",
-        icon: "fa-solid fa-power-off",
-        text: "Start",
-      }, {
+        default: true,
         icon: "fa-solid fa-plug",
-        text: "Update",
+        text: "Updating",
         href: "update.json",
-      }, {
-        icon: "fa-solid fa-plug",
-        text: "Install",
-        href: "install.json",
       }];
     }
 
     return [{
-      default: "install.json",
+      default: true,
+      icon: "fa-solid fa-power-off",
+      text: "Start",
+      href: "start.json",
+    }, {
+      icon: "fa-solid fa-plug",
+      text: "Update",
+      href: "update.json",
+    }, {
       icon: "fa-solid fa-plug",
       text: "Install",
+      href: "install.json",
     }];
   },
 };
