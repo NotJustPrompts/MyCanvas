@@ -1,0 +1,30 @@
+name: Sync upstream
+
+# Keeps the personal-account fork (used for the Pinokio listing) up to
+# date with the canonical org repo. Only runs in the fork; it is a
+# permanent no-op guard anywhere else.
+
+on:
+  schedule:
+    - cron: "23 6 * * *" # daily at 06:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.repository == 'luisnomad/MyCanvas'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward main from upstream
+        run: |
+          git remote add upstream https://github.com/NotJustPrompts/MyCanvas.git
+          git fetch upstream
+          git checkout main
+          git merge --ff-only upstream/main
+          git push origin main
