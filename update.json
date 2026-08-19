@@ -1,0 +1,22 @@
+{
+  "run": [
+    {
+      "method": "shell.run",
+      "params": {
+        "message": "git pull"
+      }
+    },
+    {
+      "method": "shell.run",
+      "params": {
+        "message": "npm install"
+      }
+    },
+    {
+      "method": "notify",
+      "params": {
+        "html": "MyCanvas has been updated."
+      }
+    }
+  ]
+}

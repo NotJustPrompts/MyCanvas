@@ -1,0 +1,17 @@
+{
+  "daemon": true,
+  "run": [
+    {
+      "method": "shell.run",
+      "params": {
+        "message": "npm run dev",
+        "on": [
+          {
+            "event": "/http:\\/\\/localhost:517\\d\\/?/",
+            "done": true
+          }
+        ]
+      }
+    }
+  ]
+}
