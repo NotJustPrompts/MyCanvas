@@ -3,7 +3,7 @@
 A local-first, Canva-lite thumbnail designer. Hono + JSON-on-disk backend (`apps/server`),
 React + react-konva editor (`apps/web`), shared types in `packages/shared`.
 
-Canva reference screenshots live in `reference/` (git-ignored).
+Canva reference screenshots live in `../reference/` (git-ignored).
 
 ## Shipped
 
@@ -202,7 +202,7 @@ Canva reference screenshots live in `reference/` (git-ignored).
 - Defaults: Effects/Shadow/Stroke open iff active; everything else expanded;
   collapse state resets on layer switch (deliberate).
 
-### Layer locking (unreleased, post-2.0)
+### Layer locking (shipped — commit `1783b0a`)
 
 - `locked?: boolean` on LayerBase (optional → no migration). Locked layers stay
   selectable by click but are frozen: no drag/transformer/nudge/z-order/delete,
@@ -219,7 +219,7 @@ Canva reference screenshots live in `reference/` (git-ignored).
   duplicate as plain layer data. A locked member inside a moved group simply
   stays behind (its write-back is filtered) — documented edge case.
 
-### Cutout trim fix + shape corner radius (unreleased, post-2.0)
+### Cutout trim fix + shape corner radius (shipped — commit `1783b0a`)
 
 - Trim fix: `trimCutout` scanned for alpha > 0, but RMBG masks leave faint
   residue (alpha 1–8, ~6–12 px/column) that can reach the frame edges —
@@ -234,12 +234,55 @@ Canva reference screenshots live in `reference/` (git-ignored).
   ignored layer x/y (Ellipse x/y after the prop spread overrode it) — circles
   now render inside a Group like text nodes do.
 
+### v2.7 — frames, drop-target cues & polish (shipped — commit `7bc1098`)
+
+- **Frames (Pass O)**: `FrameLayer` (shape + width/height/cornerRadius +
+  optional `content: {asset, offsetX, offsetY, scale}`; optional → old designs
+  valid). Konva Group + clipFunc (rounded-path tracer — corner radius works on
+  every shape); instance-patched `getClientRect` reports the shape box (Konva
+  unions unclipped children otherwise — transformer/hover/marquee would
+  overshoot). Empty frames render the placeholder illustration (sky/cloud/hills
+  Konva shapes) which DOES export (it's real content, like Canva). Fills:
+  Uploads thumb drag (`application/x-mycanvas-asset` MIME), filesystem drop
+  (hit-tests frames first), inspector Choose/Replace/Remove picker. Cover-fit
+  `max(w/iw, h/ih)` centered; double-click → content edit (pan clamped to
+  cover, wheel zoom anchored at pointer, Enter/Escape/click-away commits once;
+  transformer + ContextBar suppressed, dashed outline + hint pill). Corners
+  scale frame+content via the group scale; middles resize + re-cover (zoom
+  ratio + center preserved, baseScale-safe). Copy/paste/lock/marquee/group ride
+  along as normal layer data.
+- **Drop-target cues**: the full-viewport `.drop-overlay` is gone. Drag
+  feedback is contextual: hovering a FRAME during drag outlines it in accent +
+  soft tint and previews the dragged bitmap cover-fitted inside at 60% (bitmap
+  known only for Uploads drags — `getData` is unreadable during dragover, so
+  the asset id travels via a module stash set on dragstart); the inner ~48px
+  page edge zone previews "set as background" (full-page image at 50% for asset
+  drags, accent tint + pill for file drags); mid-canvas shows nothing,
+  Canva-style. Reject drags (non-image files) get a small floating pill below
+  the context bar. Edge drop inserts a cover-fit image layer at the BOTTOM of
+  the stack (`addImageLayerAsBackground`, image_N naming shared via
+  `nextImageName`). Precedence frame > edge > plain, identical hit tests in
+  dragover and drop.
+- **Multi-select member boundaries**: with >1 layer selected, each member gets
+  an accent hairline box (getClientRect — rotation/effects honored, group
+  members collapse into one group box, locked members keep their box) and the
+  unified extent draws as a dashed theme-gray outline; the transformer's own
+  border is suppressed in multi-select (anchors + rotate handle stay).
+- **Color picker polish**: 30×30px circular swatches, 8px gaps, 5 per row;
+  fixed the horizontal scroll caused by the HEX input.
+- **Repo rename & share-ready README**: `mycanva` → `mycanvas` (root package,
+  `@mycanvas/*` workspace scopes, 28 import specifiers, drag MIME, lockfile;
+  localStorage keys deliberately kept). GitHub repo renamed to
+  `NotJustPrompts/MyCanvas`. README rewritten for sharing (hero thumbnail,
+  requirements, full feature list). ROADMAP/IDEAS moved to `docs/`.
+
 ## Queued
 
-Order: B → C+D → F → G → H → I → E. (A and B already shipped; F–I are
-self-contained; E is the most invasive, so it goes last.)
+All implementation passes below are **shipped** (status marked per entry) and
+kept as the historical spec record. L/M/N are parked; the local-generative
+integration is a future exploration.
 
-### Pass A — canvas interaction
+### Pass A — canvas interaction — DONE (v1.7)
 
 - **Rotate handle below the selection box** (Canva position; Konva defaults above).
   Inspector rotation field already exists; keep it two-way synced. 15° snaps with Shift if cheap.
@@ -253,7 +296,7 @@ self-contained; E is the most invasive, so it goes last.)
   same wrap width); commit on blur/Escape/click-away; keyboard shortcuts must stay inert
   while editing (textarea is already covered by the text-field guard).
 
-### Pass B — menus & panels
+### Pass B — menus & panels — DONE (v1.8)
 
 - **Right-click context menu** on canvas layers (select + open at cursor, themed, closes on
   click-away/Escape): Copy ⌘C, Paste ⌘V, Duplicate ⌘D (new shortcut), Delete; divider;
@@ -269,15 +312,15 @@ self-contained; E is the most invasive, so it goes last.)
   a default palette row, and a "colors in this design" row derived live from the design's
   layers (fills, strokes, shadows, line colors, background) — deduped, no schema change.
 
-### Pass C - add more shapes
+### Pass C - add more shapes — DONE (v1.9)
 
 - Add triangle, hexagon, circle, , semicircle, star to the list of basic shapes.
 
-### Pass D - add transparency controls
+### Pass D - add transparency controls — DONE (v1.9)
 
 - For all layers, add a transparency control (a slider from 0 to 100) that allows setting the transparency of the layer.
 
-### Pass E - Implement layer grouping 
+### Pass E - Implement layer grouping — DONE (v1.14)
 
 **Phase 0 (user request): multi-select + marquee ("lasso") selection.** Selection
 becomes a set (`selectedLayerIds`), not a single id. Shift-click toggles membership;
@@ -311,7 +354,7 @@ Here is a breakdown of how grouping works in Canva and how it affects the proper
 * Grouped layers must appear **as a group** in the layers inspector: a collapsible group row (named, e.g. "Group 1") containing its member layers indented beneath it, instead of a flat list of loose layers.
 * **Ungroup** must be available wherever Group is (floating toolbar + context menu), restoring the members as independent layers at their current positions/rotations.
 
-### Pass F - 1-click background removal (client-side)
+### Pass F - 1-click background removal (client-side) — DONE (v1.10)
 
 Private, home-only project — licensing of model weights is a non-issue here.
 Approach: fully client-side, no server inference, no Python sidecar. The cutout is
@@ -364,7 +407,7 @@ produced in the browser and saved back through the normal asset pipeline.
   local Python/FastAPI sidecar — extra moving parts for zero benefit in a private,
   single-machine app.
 
-### Pass G — "Photo Colors" palette suggestions
+### Pass G — "Photo Colors" palette suggestions — DONE (v1.11)
 
 Extends the v1.8 ColorInput ("In this design" row) with per-image palettes,
 Canva-style. Sorted by a heuristic so the "star" image's palette comes first.
@@ -392,7 +435,7 @@ In the ColorInput popover, below "In this design": a "Photo colors" section —
 vertical list, per image (heuristic order): small thumbnail + row of 5 swatches.
 Click applies the color through the existing transient/commit path.
 
-### Pass H — curved / bent text
+### Pass H — curved / bent text — DONE (v1.12)
 
 Curve slider (−100…100) on text layers; 0 = straight. Characters positioned along
 an invisible circle of radius R = W/Θ, Θ = (C/100)·2π.
@@ -414,7 +457,7 @@ an invisible circle of radius R = W/Θ, Θ = (C/100)·2π.
   any effect) ghosted at low opacity behind the flat editable line; the bounding
   box continues to wrap the curved extent.
 
-### Pass I — text effects (mutually exclusive)
+### Pass I — text effects (mutually exclusive) — DONE (v1.13)
 
 One effect per text layer, or none (Canva model — replaces the current independent
 shadow/stroke toggles on text layers).
@@ -444,7 +487,7 @@ shadow/stroke toggles on text layers).
 - **Edit-in-place**: effect suspended while typing, reapplied on commit (the
   overlay is already flat text).
 
-### Pass J — text-behind-subject (from IDEAS.md #2)
+### Pass J — text-behind-subject (from IDEAS.md #2) — DONE (v2.1)
 
 The editorial "magazine depth" effect — heading sits behind the photo's subject
 but in front of its background. Reuses the Pass F RMBG-1.4 worker pipeline
@@ -460,7 +503,7 @@ as-is (same model, same cache), so this is mostly layer orchestration.
 - Compromise (document): the cutout is a static copy — moving/editing the source
   image afterwards does not re-sync it (delete + re-run to refresh).
 
-### Pass K — portrait mode / depth bokeh (from IDEAS.md #5)
+### Pass K — portrait mode / depth bokeh (from IDEAS.md #5) — DONE (v2.2)
 
 One-click DSLR-style background blur on an image layer.
 
@@ -501,71 +544,40 @@ generate images directly into Uploads from a prompt — design TBD with the user
 (server-side proxy to the local runtime vs. direct calls; where generation UI
 lives). Not started; parking L/M/N confirmed by the user.
 
-### Pass O — frames (image containers)
-
-~~Canva-style frames: shape layers that clip an image.~~ **Done** (unreleased,
-post-2.0). `FrameLayer` (shape + width/height/cornerRadius + optional
-`content: {asset, offsetX, offsetY, scale}`; optional → old designs valid).
-Konva Group + clipFunc (rounded-path tracer — corner radius works on every
-shape); instance-patched `getClientRect` reports the shape box (Konva unions
-unclipped children otherwise — transformer/hover/marquee would overshoot).
-Empty frames render the placeholder illustration (sky/cloud/hills Konva
-shapes) which DOES export (it's real content, like Canva). Fills: Uploads
-thumb drag (new `application/x-mycanva-asset` MIME), filesystem drop
-(hit-tests frames first), inspector Choose/Replace/Remove picker. Cover-fit
-`max(w/iw, h/ih)` centered; double-click → content edit (pan clamped to cover,
-wheel zoom anchored at pointer, Enter/Escape/click-away commits once;
-transformer + ContextBar suppressed, dashed outline + hint pill). Corners
-scale frame+content via the group scale; middles resize + re-cover (zoom
-ratio + center preserved, baseScale-safe). Copy/paste/lock/marquee/group ride
-along as normal layer data.
-
-### Drop-target cues (unreleased, post-2.0)
-
-- The full-viewport `.drop-overlay` is gone. Drag feedback is contextual:
-  hovering a FRAME during drag outlines it in accent + soft tint and previews
-  the dragged bitmap cover-fitted inside at 60% (bitmap known only for Uploads
-  drags — `getData` is unreadable during dragover, so the asset id travels via
-  a module stash set on dragstart); the inner ~48px page edge zone previews
-  "set as background" (full-page image at 50% for asset drags, accent tint +
-  pill for file drags); mid-canvas shows nothing, Canva-style. Reject drags
-  (non-image files) get a small floating pill below the context bar.
-- Edge drop inserts a cover-fit image layer at the BOTTOM of the stack
-  (`addImageLayerAsBackground`, image_N naming shared via `nextImageName`).
-  Precedence frame > edge > plain, identical hit tests in dragover and drop.
-
 ## Working agreements
 
 - ~~No git mutations until the user asks. Milestone: bump to 2.0 + commit~~ **Done
   (commit `6f4a6ca`, all package.jsons at 2.0.0).** IDEAS.md reviewed: J + K
   promoted and queued for implementation; L/M/N parked (need a second inference
   stack — onnxruntime-web — or frames that don't exist yet).
-- Known issue to fix post-E (user-reported): applying curve to multiline text
+- ~~Known issue to fix post-E (user-reported): applying curve to multiline text
   flattens the lines but the layer box doesn't resize to the flattened content,
-  clipping it. Recompute bounds from the TextPath on curve/content change.
-- Pre-commit refinement (user-requested): numeric params for effects (angle,
+  clipping it. Recompute bounds from the TextPath on curve/content change.~~
+  **Done** (v1.14 follow-up fixes; shipped in `6f4a6ca`).
+- ~~Pre-commit refinement (user-requested): numeric params for effects (angle,
   distance, blur, thickness, spread, roundness) get the Canva-style slider +
   synced numeric stepper combo (− value +); precise fields (font size, X/Y,
-  dims) keep plain inputs. Extend SliderField, keep transient-commit.
+  dims) keep plain inputs. Extend SliderField, keep transient-commit.~~
+  **Done** (v1.14 follow-up; shipped in `6f4a6ca`).
 - ~~Post-v2.3 fixes (user-reported): (a) middle-anchor drags need real-time preview
   for images AND text — image currently shows a distorted stretch until release
   (v1.6 nit), text should re-wrap live while dragging instead of on commit;
   (b) the text-behind-subject cutout layer must be trimmed to its content bounds
   (alpha bbox), not the full source frame — a full-frame transparent layer blocks
-  selecting anything underneath it.~~ **Done** (unreleased, post-2.0): (a) the
+  selecting anything underneath it.~~ **Done** (shipped in `1783b0a`): (a) the
   transformer bakes scale into crop/wrap width on every `transform` frame
   (`bakeMiddleTransform` in CanvasStage) and commits once at `transformend`;
   (b) `produceCutout` trims the cutout PNG to its alpha bbox (+2px) and both
   callers map the trimmed layer back through the source's scale/rotation.
 - ~~Queued small item (user-requested): **hover preview box**~~ **Done**
-  (unreleased, post-2.0): hover shows the layer's `getClientRect` outline in
+  (shipped in `1783b0a`): hover shows the layer's `getClientRect` outline in
   the overlay layer (accent hairline, `listening: false`, never exported).
   Group members box the whole group (what a click selects); inside an entered
   group, the member. Suppressed while dragging/marquee-ing/transforming, for
   selected layers, and cleared on zoom/selection change. Locked layers get the
   plain box (recognition aid).
 - ~~Queued bug (user-reported): **corner-scale then mid-drag makes text jump
-  huge.**~~ **Done**: `bakeMiddleTransform` now applies the transformer's
+  huge.**~~ **Done** (shipped in `1783b0a`): `bakeMiddleTransform` now applies the transformer's
   per-frame scale *delta* relative to the drag-start scale
   (`transformBaseScaleRef`, captured at transformstart) and restores the node
   scale after each bake — wrapWidth/crop are computed in unscaled units
@@ -575,17 +587,19 @@ along as normal layer data.
   scale-invariant; inspector shows true dims; stroked shapes renormalize
   stroke strength — pre-existing semantics, documented in code).
 - ~~Queued verification (user-requested): re-run the cutout-trim check with the
-  USER'S real image `47cd6e81f194f81c.png` in a throwaway design~~ **Done**:
+  USER'S real image `47cd6e81f194f81c.png` in a throwaway design~~ **Done**
+  (shipped in `1783b0a`):
   cutout bbox hugged the subject (right edge trimmed ~220 display px of empty
   frame); throwaway design + generated assets deleted afterwards.
 - ~~Queued (user-requested, Canva screenshot 2026-08-17 20:32): **multi-select
-  boundaries**~~ **Done** (unreleased, post-2.0): with >1 layer selected, each
+  boundaries**~~ **Done** (shipped in `7bc1098`): with >1 layer selected, each
   member gets an accent hairline box (getClientRect — rotation/effects honored,
   group members collapse into one group box, locked members keep their box) and
   the unified extent draws as a dashed theme-gray outline; the transformer's own
   border is suppressed in multi-select (anchors + rotate handle stay). Boxes
   track live via dragmove/transform hooks. Single selection unchanged.
-- ~~Queued (user-requested): **bigger color swatches**~~ **Done**: 30×30px
+- ~~Queued (user-requested): **bigger color swatches**~~ **Done** (shipped in
+  `7bc1098`): 30×30px
   circles, 8px gaps, 5 per row inside the existing 216px popover (no horizontal
   scroll); active ring offset bumped to 2px. Photo-row thumbnails unchanged.
 - **Project renamed `mycanva` → `mycanvas`** (display name "MyCanvas" unchanged):

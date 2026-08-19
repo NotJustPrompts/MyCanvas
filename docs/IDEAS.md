@@ -1,10 +1,14 @@
+> Status log (2026-08): #2 shipped (v2.1), #5 shipped (v2.2), #1/#3/#4 parked —
+> see `ROADMAP.md` (passes L/N/M) for why. Implementation notes below are the
+> original sketches; the shipped versions differ where the roadmap says so.
+
 Combining Konva's robust 2D scene graph with the immense parallel processing power of WebGPU inside Web Workers unlocks features that used to require a massive cloud infrastructure.
 
 Since we are pushing heavy tensor operations off the main thread, the Konva canvas will remain buttery smooth at 60fps even while running complex AI tasks.
 
 Here are five high-value features you can build using this exact architecture:
 
-### 1. Magic Eraser (Inpainting)
+### 1. Magic Eraser (Inpainting) — PARKED (Pass L)
 
 * **The UX:** A user has a great photo but there is a trash can or a photobomber in the background. They select a brush tool, paint a rough highlight over the unwanted object, and it seamlessly vanishes, replaced by a mathematically hallucinated background.
 * **The Implementation:**
@@ -15,7 +19,7 @@ Here are five high-value features you can build using this exact architecture:
 
 
 
-### 2. "Text-Behind-Subject" (Magazine Depth Effect)
+### 2. "Text-Behind-Subject" (Magazine Depth Effect) — SHIPPED (v2.1, Pass J)
 
 * **The UX:** The trendy editorial effect where a large text heading sits *behind* the subject of a photo but *in front* of the photo's background.
 * **The Implementation:** You can actually reuse the RMBG-1.4 model from your background removal spec for this.
@@ -30,7 +34,7 @@ Here are five high-value features you can build using this exact architecture:
 
 
 
-### 3. Smart Crop (Auto-Framing for Canva Frames)
+### 3. Smart Crop (Auto-Framing for Canva Frames) — PARKED (Pass N)
 
 * **The UX:** When a user drops a horizontal landscape photo into a vertical Canva Frame (clipping mask), the center of the image is often just empty space, while the person standing on the left gets cut out. Smart Crop automatically shifts the image inside the frame to center the most important subject.
 * **The Implementation:**
@@ -40,7 +44,7 @@ Here are five high-value features you can build using this exact architecture:
 
 
 
-### 4. AI Image Upscaling (Super Resolution)
+### 4. AI Image Upscaling (Super Resolution) — PARKED (Pass M)
 
 * **The UX:** Users constantly upload small, pixelated, or heavily compressed images from the web. Offer a "1-Click Enhance" button that makes the image crisp and high-definition.
 * **The Implementation:**
@@ -50,7 +54,7 @@ Here are five high-value features you can build using this exact architecture:
 
 
 
-### 5. Depth-Based "Portrait Mode" (True Bokeh)
+### 5. Depth-Based "Portrait Mode" (True Bokeh) — SHIPPED (v2.2, Pass K)
 
 * **The UX:** The user clicks a flat, standard photo and applies a "Portrait Mode" filter, which artificially blurs the background while keeping the subject perfectly sharp, simulating a high-end DSLR camera.
 * **The Implementation:**
