@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.DS_Store
+.git
+.github
+.playwright-mcp
+apps/server/data
+reference
+brand
+docs

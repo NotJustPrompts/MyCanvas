@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { existsSync } from "node:fs";
 import { readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -17,6 +18,7 @@ import {
   newId,
   readJsonFile,
   settingsFile,
+  webDistDir,
   writeJsonFile,
 } from "./storage";
 
@@ -236,6 +238,14 @@ app.put("/api/fonts/favorites", async (c) => {
   await writeJsonFile(settingsFile, settings);
   return c.json(settings);
 });
+
+app.get("/healthz", (c) => c.json({ ok: true }));
+
+// In production the server also serves the built web app (hash-routed, so
+// no SPA fallback is needed). In dev, Vite serves it and proxies /api here.
+if (existsSync(webDistDir)) {
+  app.use("/*", serveStatic({ root: webDistDir }));
+}
 
 await ensureDataDirs();
 

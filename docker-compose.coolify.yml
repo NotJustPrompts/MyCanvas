@@ -1,0 +1,15 @@
+# Coolify deployment (build pack: Docker Compose). No published ports and no
+# Coolify domain: the app is reached only through the LAN-restricted Traefik
+# route in ops/traefik/mycanvas-local.yaml (https://canva.local).
+services:
+  mycanvas:
+    init: true
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - mycanvas-data:/data
+
+volumes:
+  mycanvas-data:

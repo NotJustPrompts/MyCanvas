@@ -67,3 +67,28 @@ export function ensureFontLoaded(family: string): Promise<void> {
 export function ensureFontsLoaded(families: Iterable<string>): Promise<void> {
   return Promise.all(Array.from(families, (family) => ensureFontLoaded(family))).then(() => undefined);
 }
+
+interface LocalFontData {
+  family: string;
+}
+
+/**
+ * Font families installed on the machine running the browser. Uses the Local
+ * Font Access API (Chrome/Edge, secure context, asks permission once) so the
+ * list is right even when the server runs elsewhere; falls back to the
+ * server's own font scan, which only matches when both run on one machine.
+ */
+export async function listLocalFonts(fallback: () => Promise<string[]>): Promise<string[]> {
+  const query = (window as { queryLocalFonts?: () => Promise<LocalFontData[]> }).queryLocalFonts;
+  if (query) {
+    try {
+      const families = new Set((await query()).map((font) => font.family));
+      if (families.size > 0) {
+        return [...families].sort((a, b) => a.localeCompare(b));
+      }
+    } catch {
+      // Permission denied or API unavailable here; use the server scan.
+    }
+  }
+  return fallback();
+}

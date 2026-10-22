@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { GOOGLE_FONTS, type GoogleFont } from "@mycanvas/shared";
 import { api } from "../api";
-import { ensureFontLoaded, isGoogleFont } from "../utils/fonts";
+import { ensureFontLoaded, isGoogleFont, listLocalFonts } from "../utils/fonts";
 
 interface FontPickerProps {
   value: string;
@@ -58,8 +58,7 @@ export function FontPicker({ value, onApply, compact = false }: FontPickerProps)
         });
     }
     if (systemFonts === null) {
-      void api
-        .systemFonts()
+      void listLocalFonts(api.systemFonts)
         .then(setSystemFonts)
         .catch(() => {
           setSystemFonts([]);

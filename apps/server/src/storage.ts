@@ -5,11 +5,14 @@ import path from "node:path";
 
 const serverRoot = path.resolve(import.meta.dirname, "..");
 
-export const dataDir = path.join(serverRoot, "data");
+export const dataDir = process.env.MYCANVAS_DATA_DIR ?? path.join(serverRoot, "data");
 export const designsDir = path.join(dataDir, "designs");
 export const assetsDir = path.join(dataDir, "assets");
 export const assetsManifestFile = path.join(dataDir, "assets.json");
 export const settingsFile = path.join(dataDir, "settings.json");
+
+/** Built web app, served by this server in production (see Dockerfile). */
+export const webDistDir = process.env.MYCANVAS_WEB_DIST ?? path.resolve(serverRoot, "../web/dist");
 
 export const fontDirs = [
   "/System/Library/Fonts",
