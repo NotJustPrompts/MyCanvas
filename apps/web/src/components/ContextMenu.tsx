@@ -18,6 +18,9 @@ export function ContextMenu() {
   const selectedLayerIds = useEditorStore((state) => state.selectedLayerIds);
   const copySelectedLayers = useEditorStore((state) => state.copySelectedLayers);
   const pasteLayers = useEditorStore((state) => state.pasteLayers);
+  const textStyleClipboard = useEditorStore((state) => state.textStyleClipboard);
+  const copyTextStyle = useEditorStore((state) => state.copyTextStyle);
+  const pasteTextStyle = useEditorStore((state) => state.pasteTextStyle);
   const duplicateSelectedLayers = useEditorStore((state) => state.duplicateSelectedLayers);
   const removeSelectedLayers = useEditorStore((state) => state.removeSelectedLayers);
   const moveSelectedLayers = useEditorStore((state) => state.moveSelectedLayers);
@@ -27,7 +30,10 @@ export function ContextMenu() {
   const bgRemovalBusy = useEditorStore((state) => state.bgRemoval !== null);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const submenuAnchorRef = useRef<HTMLDivElement | null>(null);
+  const submenuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ x: 0, y: 0, flipX: false });
+  const [submenuTop, setSubmenuTop] = useState(-5);
 
   // Close on Escape or any scroll while open.
   useEffect(() => {
@@ -67,6 +73,19 @@ export function ContextMenu() {
       flipX: menu.x + width + 190 > window.innerWidth,
     });
   }, [menu]);
+
+  useLayoutEffect(() => {
+    if (!menu || !submenuAnchorRef.current || !submenuRef.current) { return; }
+    const submenu = submenuRef.current;
+    // It is normally display:none until hover; measure it without showing it.
+    submenu.style.display = "block";
+    submenu.style.visibility = "hidden";
+    const height = submenu.getBoundingClientRect().height;
+    const anchorTop = submenuAnchorRef.current.getBoundingClientRect().top;
+    submenu.style.display = "";
+    submenu.style.visibility = "";
+    setSubmenuTop(Math.max(8 - anchorTop, Math.min(-5, window.innerHeight - 8 - anchorTop - height)));
+  }, [menu, position]);
 
   if (!menu || !design) {
     return null;
@@ -136,6 +155,22 @@ export function ContextMenu() {
           Duplicate
           <kbd>Cmd+D</kbd>
         </button>
+        {layer.type === "text" && (
+          <>
+            <div className="context-menu-divider" />
+            <button type="button" role="menuitem" onClick={() => { run(() => { copyTextStyle(layer.id); }); }}>
+              Copy style
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!textStyleClipboard || layer.locked}
+              onClick={() => { run(() => { pasteTextStyle(layer.id); }); }}
+            >
+              Paste style
+            </button>
+          </>
+        )}
         {layer.type === "image" && (
           <button
             type="button"
@@ -197,12 +232,12 @@ export function ContextMenu() {
           </button>
         )}
         {!layer.locked && (
-          <div className={position.flipX ? "context-submenu-anchor flip" : "context-submenu-anchor"}>
+          <div ref={submenuAnchorRef} className={position.flipX ? "context-submenu-anchor flip" : "context-submenu-anchor"}>
             <button type="button" role="menuitem" className="context-submenu-trigger">
               Align to page
               <span className="caret">›</span>
             </button>
-            <div className="context-submenu" role="menu">
+            <div ref={submenuRef} className="context-submenu" role="menu" style={{ top: submenuTop }}>
               <button type="button" role="menuitem" onClick={() => { align("x", "min"); }}>Left</button>
               <button type="button" role="menuitem" onClick={() => { align("x", "center"); }}>Center</button>
               <button type="button" role="menuitem" onClick={() => { align("x", "max"); }}>Right</button>

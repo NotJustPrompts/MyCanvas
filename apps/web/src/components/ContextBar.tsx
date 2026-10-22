@@ -8,7 +8,7 @@ import { FontPicker } from "./FontPicker";
  * Text selections get font controls prepended; every selection gets the
  * duplicate / z-order / delete quick actions.
  */
-export function ContextBar() {
+export function ContextBar({ onOpenTextProperties }: { onOpenTextProperties: () => void }) {
   const selectedLayerIds = useEditorStore((state) => state.selectedLayerIds);
   const layer = useEditorStore((state) =>
     state.design?.layers.find((entry) => entry.id === primarySelectedId(state)));
@@ -120,6 +120,13 @@ export function ContextBar() {
             }}
             onCommit={commitTransient}
           />
+          <button
+            type="button"
+            className="context-properties-button"
+            onClick={onOpenTextProperties}
+          >
+            Properties
+          </button>
           <span className="context-sep" aria-hidden="true" />
         </>
       )}

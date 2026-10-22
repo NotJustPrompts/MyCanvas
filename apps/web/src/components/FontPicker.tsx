@@ -16,6 +16,15 @@ export function FontPicker({ value, onApply, compact = false }: FontPickerProps)
   const [favorites, setFavorites] = useState<string[] | null>(null);
   const [systemFonts, setSystemFonts] = useState<string[] | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const groupsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onFavoritesChanged = (event: Event) => {
+      setFavorites((event as CustomEvent<string[]>).detail);
+    };
+    window.addEventListener("font-favorites-changed", onFavoritesChanged);
+    return () => { window.removeEventListener("font-favorites-changed", onFavoritesChanged); };
+  }, []);
 
   // Close when clicking outside the dropdown.
   useEffect(() => {
@@ -42,10 +51,10 @@ export function FontPicker({ value, onApply, compact = false }: FontPickerProps)
       void api
         .getFontFavorites()
         .then((res) => {
-          setFavorites(res.googleFontFavorites);
+          setFavorites((current) => current ?? res.googleFontFavorites);
         })
         .catch(() => {
-          setFavorites([]);
+          setFavorites((current) => current ?? []);
         });
     }
     if (systemFonts === null) {
@@ -72,8 +81,15 @@ export function FontPicker({ value, onApply, compact = false }: FontPickerProps)
       ? current.filter((fav) => fav !== family)
       : [...current, family];
     setFavorites(next);
+    window.dispatchEvent(new CustomEvent("font-favorites-changed", { detail: next }));
+    if (!current.includes(family)) {
+      // The star is usually clicked deep in the long Google Fonts list.
+      // Reveal the newly added favorite at the top of this dropdown.
+      requestAnimationFrame(() => { groupsRef.current?.scrollTo({ top: 0, behavior: "smooth" }); });
+    }
     void api.setFontFavorites(next).catch(() => {
       setFavorites(current);
+      window.dispatchEvent(new CustomEvent("font-favorites-changed", { detail: current }));
     });
   };
 
@@ -138,7 +154,7 @@ export function FontPicker({ value, onApply, compact = false }: FontPickerProps)
               setFilter(e.target.value);
             }}
           />
-          <div className="font-groups">
+          <div className="font-groups" ref={groupsRef}>
             {favoriteFonts.length > 0 && (
               <div className="font-group">
                 <h4>Favorites</h4>

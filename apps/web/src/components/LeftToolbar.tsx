@@ -16,6 +16,10 @@ import { newLayerId, primarySelectedId, useEditorStore } from "../store/editorSt
 import { ensureFontLoaded } from "../utils/fonts";
 import { ASSET_DRAG_MIME, framePathData, setCurrentAssetDrag } from "../utils/frames";
 import { ColorInput } from "./ColorInput";
+import { Panel } from "./inspector/Panel";
+import { TextContentSection } from "./inspector/TextContentSection";
+import { TextEffectsSection } from "./inspector/TextEffectsSection";
+import { TextLayoutSection } from "./inspector/TextLayoutSection";
 
 type RailTab = "text" | "shapes" | "uploads";
 
@@ -51,8 +55,9 @@ function FrameThumb({ shape, radius }: { shape: FrameShape; radius: number }) {
   );
 }
 
-export function LeftToolbar() {
+export function LeftToolbar({ textPropertiesRequest }: { textPropertiesRequest: number }) {
   const design = useEditorStore((state) => state.design);
+  const selectedLayerIds = useEditorStore((state) => state.selectedLayerIds);
   const selectedLayer = useEditorStore((state) =>
     state.design?.layers.find((layer) => layer.id === primarySelectedId(state)));
   const addLayer = useEditorStore((state) => state.addLayer);
@@ -69,6 +74,25 @@ export function LeftToolbar() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [lastBgColor, setLastBgColor] = useState("#ffffff");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const propertiesSectionRef = useRef<HTMLDivElement | null>(null);
+  const handledPropertiesRequestRef = useRef(0);
+  const pendingPropertiesScrollRef = useRef(false);
+
+  useEffect(() => {
+    if (textPropertiesRequest !== handledPropertiesRequestRef.current) {
+      handledPropertiesRequestRef.current = textPropertiesRequest;
+      pendingPropertiesScrollRef.current = true;
+    }
+    if (!pendingPropertiesScrollRef.current) {
+      return;
+    }
+    if (tab !== "text") {
+      setTab("text");
+      return;
+    }
+    propertiesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    pendingPropertiesScrollRef.current = false;
+  }, [tab, textPropertiesRequest]);
 
   // Refetch the asset list on mount and whenever an upload lands (including
   // drag-and-drop uploads onto the canvas).
@@ -80,12 +104,19 @@ export function LeftToolbar() {
   }, [assetsVersion]);
 
   useEffect(() => {
+    let changed = false;
+    const onFavoritesChanged = (event: Event) => {
+      changed = true;
+      setFavorites((event as CustomEvent<string[]>).detail);
+    };
+    window.addEventListener("font-favorites-changed", onFavoritesChanged);
     void api
       .getFontFavorites()
       .then((res) => {
-        setFavorites(res.googleFontFavorites);
+        if (!changed) { setFavorites(res.googleFontFavorites); }
       })
       .catch(() => undefined);
+    return () => { window.removeEventListener("font-favorites-changed", onFavoritesChanged); };
   }, []);
 
   if (!design) {
@@ -321,34 +352,60 @@ export function LeftToolbar() {
                 </svg>
                 Add a text box
               </button>
-              {favorites.length > 0 && (
-                <div className="panel-section">
-                  <h3>Favorite fonts</h3>
-                  <div className="favorite-fonts">
-                    {favorites.map((family) => (
-                      <button
-                        key={family}
-                        type="button"
-                        className="favorite-font"
-                        style={{ fontFamily: `"${family}"` }}
-                        title={
-                          selectedLayer?.type === "text"
-                            ? `Apply ${family} to selection`
-                            : `Add a text box in ${family}`
-                        }
-                        onMouseEnter={() => {
-                          void ensureFontLoaded(family);
-                        }}
-                        onClick={() => {
-                          applyFavoriteFont(family);
-                        }}
-                      >
-                        {family}
-                      </button>
-                    ))}
+              <div className="left-text-sections">
+                <Panel title="Favorite fonts">
+                  {favorites.length > 0
+                    ? (
+                        <div className="favorite-fonts">
+                          {favorites.map((family) => (
+                            <button
+                              key={family}
+                              type="button"
+                              className="favorite-font"
+                              style={{ fontFamily: `"${family}"` }}
+                              title={
+                                selectedLayer?.type === "text"
+                                  ? `Apply ${family} to selection`
+                                  : `Add a text box in ${family}`
+                              }
+                              onMouseEnter={() => {
+                                void ensureFontLoaded(family);
+                              }}
+                              onClick={() => {
+                                applyFavoriteFont(family);
+                              }}
+                            >
+                              {family}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    : <p className="muted">No favorite fonts yet.</p>}
+                </Panel>
+                {selectedLayerIds.length === 1 && selectedLayer?.type === "text" && (
+                  <div
+                    key={`${selectedLayer.id}-${String(textPropertiesRequest)}`}
+                    ref={propertiesSectionRef}
+                    className={selectedLayer.locked ? "left-text-properties locked" : "left-text-properties"}
+                  >
+                    <TextContentSection
+                      layer={selectedLayer}
+                      patch={(patch, transient) => { updateLayer(selectedLayer.id, patch, transient); }}
+                      commit={commitTransient}
+                    />
+                    <TextLayoutSection
+                      layer={selectedLayer}
+                      patch={(patch, transient) => { updateLayer(selectedLayer.id, patch, transient); }}
+                      commit={commitTransient}
+                    />
+                    <TextEffectsSection
+                      layer={selectedLayer}
+                      patch={(patch, transient) => { updateLayer(selectedLayer.id, patch, transient); }}
+                      commit={commitTransient}
+                    />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </>
           )}
 

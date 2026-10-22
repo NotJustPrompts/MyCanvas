@@ -21,6 +21,7 @@ export function Editor({ designId }: { designId: string }) {
   const [fitScale, setFitScale] = useState(1);
   const [zoom, setZoom] = useState<number | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const [textPropertiesRequest, setTextPropertiesRequest] = useState(0);
 
   const loadDesign = useEditorStore((state) => state.loadDesign);
   const unload = useEditorStore((state) => state.unload);
@@ -253,9 +254,9 @@ export function Editor({ designId }: { designId: string }) {
         </button>
       </header>
       <div className="editor-main">
-        <LeftToolbar />
+        <LeftToolbar textPropertiesRequest={textPropertiesRequest} />
         <main className="editor-center">
-          <ContextBar />
+          <ContextBar onOpenTextProperties={() => { setTextPropertiesRequest((request) => request + 1); }} />
           <div className="canvas-wrap">
             <CanvasStage design={design} scale={effectiveScale} onFitScale={handleFitScale} />
           </div>

@@ -5,6 +5,7 @@ import { Panel } from "./Panel";
 const EFFECT_TILES: { type: TextEffect["type"]; label: string; glyphClass: string }[] = [
   { type: "none", label: "None", glyphClass: "effect-none" },
   { type: "shadow", label: "Shadow", glyphClass: "effect-shadow" },
+  { type: "glow", label: "Glow", glyphClass: "effect-glow" },
   { type: "outline", label: "Outline", glyphClass: "effect-outline" },
   { type: "echo", label: "Echo", glyphClass: "effect-echo" },
   { type: "background", label: "Background", glyphClass: "effect-background" },
@@ -19,7 +20,7 @@ export function TextEffectsSection({ layer, patch, commit }: SectionProps<TextLa
   };
 
   return (
-    <Panel title="Effects" defaultOpen={effect.type !== "none"}>
+    <Panel title="Effects" defaultOpen>
       <div className="effects-grid">
         {EFFECT_TILES.map((tile) => (
           <button
@@ -48,6 +49,14 @@ export function TextEffectsSection({ layer, patch, commit }: SectionProps<TextLa
         <div className="field-grid">
           <ColorField label="Color" value={effect.color} onChange={(color) => { setParam({ ...effect, color }); }} onCommit={commit} />
           <SliderField label="Thickness" value={effect.thickness} min={1} max={40} step={1} onChange={(thickness) => { setParam({ ...effect, thickness }); }} onCommit={commit} />
+        </div>
+      )}
+      {effect.type === "glow" && (
+        <div className="field-grid">
+          <ColorField label="Color" value={effect.color} onChange={(color) => { setParam({ ...effect, color }); }} onCommit={commit} />
+          <SliderField label="Spread" value={effect.spread} min={0} max={60} step={1} onChange={(spread) => { setParam({ ...effect, spread }); }} onCommit={commit} />
+          <SliderField label="Blur" value={effect.blur ?? 20} min={0} max={60} step={1} onChange={(blur) => { setParam({ ...effect, blur }); }} onCommit={commit} />
+          <SliderField label="Strength" value={effect.strength} min={0} max={100} step={1} onChange={(strength) => { setParam({ ...effect, strength }); }} onCommit={commit} />
         </div>
       )}
       {effect.type === "echo" && (

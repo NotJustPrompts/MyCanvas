@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type DragEvent, useState } from "react";
 import { type Layer } from "@mycanvas/shared";
 import { useEditorStore } from "../store/editorStore";
 
@@ -90,11 +90,14 @@ export function LayersPanel() {
   const removeLayer = useEditorStore((state) => state.removeLayer);
   const duplicateLayer = useEditorStore((state) => state.duplicateLayer);
   const moveLayer = useEditorStore((state) => state.moveLayer);
+  const reorderLayerBlock = useEditorStore((state) => state.reorderLayerBlock);
   const openContextMenu = useEditorStore((state) => state.openContextMenu);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(new Set());
+  const [dragged, setDragged] = useState<{ ids: string[]; groupId?: string; member: boolean } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ key: string; above: boolean } | null>(null);
 
   if (!design) {
     return null;
@@ -162,6 +165,34 @@ export function LayersPanel() {
     });
   };
 
+  const canDrop = (ids: string[], groupId?: string) =>
+    dragged && !ids.some((id) => dragged.ids.includes(id)) &&
+    (dragged.member ? groupId === dragged.groupId : !groupId || ids.length > 1);
+
+  const onDragOverRow = (e: DragEvent<HTMLElement>, ids: string[], groupId?: string) => {
+    e.stopPropagation();
+    if (!canDrop(ids, groupId)) { return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropTarget({ key: ids.join(","), above: e.clientY < rect.top + rect.height / 2 });
+  };
+
+  const onDropRow = (e: DragEvent<HTMLElement>, ids: string[], groupId?: string) => {
+    e.stopPropagation();
+    if (canDrop(ids, groupId) && dragged) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      reorderLayerBlock(dragged.ids, ids, e.clientY < rect.top + rect.height / 2);
+    }
+    setDragged(null);
+    setDropTarget(null);
+  };
+
+  const dropClass = (ids: string[]) => dropTarget?.key === ids.join(",")
+    ? dropTarget.above ? " drop-above" : " drop-below"
+    : "";
+
   const renderLayerRow = (layer: Layer, indented: boolean) => (
     <li
       key={layer.id}
@@ -169,7 +200,17 @@ export function LayersPanel() {
         "layer-row",
         indented ? "indented" : "",
         selectedLayerIds.includes(layer.id) ? "selected" : "",
-      ].filter(Boolean).join(" ")}
+      ].filter(Boolean).join(" ") + dropClass([layer.id])}
+      draggable={!layer.locked}
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", layer.id);
+        setDragged({ ids: [layer.id], groupId: layer.groupId, member: Boolean(layer.groupId) });
+      }}
+      onDragEnd={() => { setDragged(null); setDropTarget(null); }}
+      onDragOver={(e) => { onDragOverRow(e, [layer.id], layer.groupId); }}
+      onDrop={(e) => { onDropRow(e, [layer.id], layer.groupId); }}
       onClick={(e) => {
         if (e.shiftKey) {
           toggleSelectLayer(layer.id);
@@ -309,9 +350,22 @@ export function LayersPanel() {
           const allSelected = memberIds.every((id) => selectedLayerIds.includes(id));
           const collapsed = collapsedGroups.has(item.groupId);
           return (
-            <li key={item.groupId} className="layer-group">
+            <li
+              key={item.groupId}
+              className="layer-group"
+              draggable={!item.members.some((member) => member.locked)}
+              onDragStart={(e) => {
+                if (e.target !== e.currentTarget && (e.target as HTMLElement).closest(".layer-group-members")) { return; }
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", item.groupId);
+                setDragged({ ids: memberIds, member: false });
+              }}
+              onDragEnd={() => { setDragged(null); setDropTarget(null); }}
+            >
               <div
-                className={allSelected ? "layer-row group-header selected" : "layer-row group-header"}
+                className={(allSelected ? "layer-row group-header selected" : "layer-row group-header") + dropClass(memberIds)}
+                onDragOver={(e) => { onDragOverRow(e, memberIds); }}
+                onDrop={(e) => { onDropRow(e, memberIds); }}
                 onClick={() => {
                   setSelectedLayers(memberIds);
                 }}

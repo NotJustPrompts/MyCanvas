@@ -28,6 +28,12 @@ export type LayerPatch = Partial<TextLayer>
   & Partial<LineLayer>
   & Partial<FrameLayer>;
 
+/** Text appearance, excluding the destination's content and geometry. */
+type TextStyle = Pick<TextLayer,
+  "fontFamily" | "fontSize" | "fontStyle" | "fill" | "align"
+  | "lineHeight" | "letterSpacing" | "wrapWidth" | "curve" | "effect"
+  | "shadow" | "stroke" | "opacity">;
+
 const HISTORY_LIMIT = 100;
 const AUTOSAVE_DELAY_MS = 800;
 
@@ -101,8 +107,12 @@ export interface EditorStore {
   copyLayer: (id: string) => void;
   copySelectedLayers: () => void;
   pasteLayers: () => void;
+  textStyleClipboard: TextStyle | null;
+  copyTextStyle: (id: string) => void;
+  pasteTextStyle: (id: string) => void;
   moveLayer: (id: string, direction: 1 | -1) => void;
   moveSelectedLayers: (direction: 1 | -1) => void;
+  reorderLayerBlock: (sourceIds: string[], targetIds: string[], above: boolean) => void;
   groupSelection: () => void;
   ungroupSelection: () => void;
   undo: () => void;
@@ -209,6 +219,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
     past: [],
     future: [],
     pendingSnapshot: null,
+    textStyleClipboard: null,
 
     loadDesign: async (id) => {
       if (saveTimer) {
@@ -650,6 +661,28 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
       set({ selectedLayerIds: clones.map((clone) => clone.id) });
     },
 
+    copyTextStyle: (id) => {
+      const layer = get().design?.layers.find((entry) => entry.id === id);
+      if (layer?.type !== "text") {
+        return;
+      }
+      const { fontFamily, fontSize, fontStyle, fill, align, lineHeight, letterSpacing,
+        wrapWidth, curve, effect, shadow, stroke, opacity } = layer;
+      set({ textStyleClipboard: structuredClone({ fontFamily, fontSize, fontStyle, fill, align,
+        lineHeight, letterSpacing, wrapWidth, curve, effect, shadow, stroke, opacity }) });
+      get().showToast("Text style copied");
+    },
+
+    pasteTextStyle: (id) => {
+      const layer = get().design?.layers.find((entry) => entry.id === id);
+      const style = get().textStyleClipboard;
+      if (layer?.type !== "text" || layer.locked || !style) {
+        return;
+      }
+      get().updateLayer(id, structuredClone(style));
+      get().showToast("Text style pasted");
+    },
+
     moveLayer: (id, direction) => {
       set({ selectedLayerIds: [id] });
       get().moveSelectedLayers(direction);
@@ -690,6 +723,24 @@ export const useEditorStore = create<EditorStore>()((set, get) => {
         }
         return { layers };
       }, false);
+    },
+
+    reorderLayerBlock: (sourceIds, targetIds, above) => {
+      const design = get().design;
+      if (!design || sourceIds.some((id) => targetIds.includes(id))) { return; }
+      const source = new Set(sourceIds);
+      const target = new Set(targetIds);
+      if (design.layers.filter((layer) => source.has(layer.id)).length !== source.size ||
+        design.layers.filter((layer) => target.has(layer.id)).length !== target.size ||
+        design.layers.some((layer) => source.has(layer.id) && layer.locked)) { return; }
+      const remaining = design.layers.filter((layer) => !source.has(layer.id));
+      const targetIndices = remaining.flatMap((layer, index) => target.has(layer.id) ? [index] : []);
+      if (targetIndices.length === 0) { return; }
+      const insertAt = above ? Math.max(...targetIndices) + 1 : Math.min(...targetIndices);
+      const moving = design.layers.filter((layer) => source.has(layer.id));
+      const layers = [...remaining.slice(0, insertAt), ...moving, ...remaining.slice(insertAt)];
+      if (layers.every((layer, index) => layer.id === design.layers[index]?.id)) { return; }
+      mutate(() => ({ layers }), false);
     },
 
     groupSelection: () => {

@@ -496,7 +496,7 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
   /**
    * Canva-style anchors per layer type: corners always scale (keepRatio),
    * middle anchors resize the box. Text hides top/bottom middles (its height
-   * is content-driven); lines keep corners only.
+   * is content-driven); lines expose horizontal endpoint resizing.
    */
   const enabledAnchors =
     selectedLayerIds.length > 1
@@ -508,7 +508,7 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
                 ? ["top-left", "top-right", "bottom-left", "bottom-right"]
                 : ["top-left", "top-right", "bottom-left", "bottom-right", "middle-left", "middle-right"]
             : selectedLayer.type === "line"
-              ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+              ? ["middle-left", "middle-right", "top-left", "top-right", "bottom-left", "bottom-right"]
               : undefined;
 
   const onTransformStart = () => {
@@ -576,6 +576,18 @@ export function CanvasStage({ design, scale, onFitScale }: CanvasStageProps) {
     const pos = { x: node.x(), y: node.y(), rotation: node.rotation() };
     const isMiddleX = anchor === "middle-left" || anchor === "middle-right";
     const isMiddleY = anchor === "top-center" || anchor === "bottom-center";
+
+    if (isMiddleX && layer.type === "line") {
+      const base = transformBaseScaleRef.current.x || 1;
+      const delta = sx / base;
+      const [x1, y1, x2, y2] = layer.points;
+      const width = x2 - x1;
+      const points: [number, number, number, number] = anchor === "middle-left"
+        ? [x2 - width * delta, y1, x2, y2]
+        : [x1, y1, x1 + width * delta, y2];
+      updateLayer(layer.id, { ...pos, x: layer.x, points, scaleX: base, scaleY: sy });
+      return;
+    }
 
     // Middle drags resize the box, not the content. The live bake works in
     // unscaled units and restores the node's drag-start scale, so the commit

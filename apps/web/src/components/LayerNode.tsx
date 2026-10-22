@@ -1,5 +1,5 @@
 import Konva from "konva";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Circle, Ellipse, Group, Image as KonvaImage, Line, Path, Rect, Text, TextPath } from "react-konva";
 import {
   type FrameLayer,
@@ -135,6 +135,8 @@ interface TextContentProps {
   strokeEnabled?: boolean;
   strokeColor?: string;
   strokeThickness?: number;
+  opacity?: number;
+  blur?: number;
   shadow?: ShadowEffect;
   x?: number;
   y?: number;
@@ -168,6 +170,23 @@ function TextNode({ layer, registerRef }: { layer: TextLayer } & LayerNodeProps)
   const effect = layer.effect ?? { type: "none" as const };
   const [lineWidths, setLineWidths] = useState<number[]>([]);
   const mainTextRef = useRef<Konva.Text | Konva.TextPath | null>(null);
+  const glowRef = useRef<Konva.Text | Konva.TextPath | null>(null);
+
+  const refreshGlowCache = useCallback(() => {
+    if (effect.type !== "glow" || !glowRef.current) {
+      return;
+    }
+    const blur = effect.blur ?? 20;
+    const node = glowRef.current;
+    node.clearCache();
+    // Give the blur room outside the glyph and spread, including at text edges.
+    node.cache({ offset: Math.ceil(effect.spread / 2 + blur * 2 + 4) });
+    node.getLayer()?.batchDraw();
+  }, [effect]);
+
+  useLayoutEffect(() => {
+    refreshGlowCache();
+  }, [refreshGlowCache, layer.text, layer.fontFamily, layer.fontSize, layer.fontStyle, layer.letterSpacing, layer.wrapWidth, layer.lineHeight, layer.align, curve]);
 
   const setMainRef = (node: Konva.Text | Konva.TextPath | null) => {
     mainTextRef.current = node;
@@ -183,10 +202,11 @@ function TextNode({ layer, registerRef }: { layer: TextLayer } & LayerNodeProps)
 
   useEffect(() => {
     void ensureFontLoaded(layer.fontFamily).then(() => {
+      refreshGlowCache();
       localRef.current?.getLayer()?.batchDraw();
       measureLines();
     });
-  }, [layer.fontFamily, localRef, measureLines]);
+  }, [layer.fontFamily, localRef, measureLines, refreshGlowCache]);
 
   useEffect(() => {
     measureLines();
@@ -221,6 +241,9 @@ function TextNode({ layer, registerRef }: { layer: TextLayer } & LayerNodeProps)
       x: props.x ?? 0,
       y: props.y ?? 0,
       listening: props.listening,
+      opacity: props.opacity,
+      filters: props.blur === undefined ? undefined : [Konva.Filters.Blur],
+      blurRadius: props.blur,
       fillEnabled: props.fill !== undefined ? true : undefined,
       strokeEnabled: props.strokeEnabled,
       stroke: props.strokeColor,
@@ -275,6 +298,21 @@ function TextNode({ layer, registerRef }: { layer: TextLayer } & LayerNodeProps)
           opacity: effect.opacity,
         },
       }),
+    );
+  } else if (effect.type === "glow") {
+    const strength = effect.strength / 100;
+    children.push(
+      content("glow", {
+        fill: effect.color,
+        strokeEnabled: true,
+        strokeColor: effect.color,
+        strokeThickness: Math.max(1, effect.spread),
+        opacity: strength,
+        blur: effect.blur ?? 20,
+        refCallback: (node) => { glowRef.current = node; },
+        listening: false,
+      }),
+      content("main", { refCallback: setMainRef }),
     );
   } else if (effect.type === "outline") {
     // Stroke-only copy at 2x thickness behind the fill copy — the fill paints
@@ -381,17 +419,28 @@ function RectNode({ layer, registerRef }: { layer: RectLayer } & LayerNodeProps)
 
 function LineNode({ layer, registerRef }: { layer: LineLayer } & LayerNodeProps) {
   const { common, setRefs } = useCommonNodeProps(layer, registerRef);
+  const [x1, y1, x2, y2] = layer.points;
+  const left = Math.min(x1, x2);
+  const top = Math.min(y1, y2);
   return (
-    <Line
-      ref={setRefs}
-      points={layer.points}
-      stroke={layer.strokeColor}
-      strokeWidth={layer.strokeWidth}
-      lineCap={layer.lineCap}
-      hitStrokeWidth={Math.max(12, layer.strokeWidth)}
-      {...shadowProps(layer.shadow)}
-      {...common}
-    />
+    <Group ref={setRefs} {...common}>
+      <Rect
+        x={left}
+        y={top - 6}
+        width={Math.max(1, Math.abs(x2 - x1))}
+        height={Math.max(12, Math.abs(y2 - y1) + 12)}
+        fill="transparent"
+        listening={false}
+      />
+      <Line
+        points={layer.points}
+        stroke={layer.strokeColor}
+        strokeWidth={layer.strokeWidth}
+        lineCap={layer.lineCap}
+        hitStrokeWidth={Math.max(12, layer.strokeWidth)}
+        {...shadowProps(layer.shadow)}
+      />
+    </Group>
   );
 }
 

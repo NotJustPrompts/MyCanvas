@@ -6,9 +6,6 @@ import { FrameSection } from "./inspector/FrameSection";
 import { ImageSection } from "./inspector/ImageSection";
 import { PositionSection } from "./inspector/PositionSection";
 import { LineSection, RectSection, ShapeSection } from "./inspector/ShapeSections";
-import { TextContentSection } from "./inspector/TextContentSection";
-import { TextEffectsSection } from "./inspector/TextEffectsSection";
-import { TextLayoutSection } from "./inspector/TextLayoutSection";
 
 /**
  * Right-hand properties sidebar: a composition of collapsible panels chosen
@@ -63,13 +60,6 @@ export function Inspector() {
       )}
       <div className={layer.locked ? "inspector-panels locked" : "inspector-panels"} key={layer.id}>
         <PositionSection layer={layer} patch={patch} commit={commitTransient} />
-        {layer.type === "text" && (
-          <>
-            <TextContentSection layer={layer} patch={patch} commit={commitTransient} />
-            <TextLayoutSection layer={layer} patch={patch} commit={commitTransient} />
-            <TextEffectsSection layer={layer} patch={patch} commit={commitTransient} />
-          </>
-        )}
         {layer.type === "image" && (
           <>
             <ImageSection layer={layer} patch={patch} commit={commitTransient} />

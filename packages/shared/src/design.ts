@@ -35,6 +35,7 @@ interface LayerBase {
 export type TextEffect =
   | { type: "none" }
   | { type: "shadow"; color: string; distance: number; angle: number; blur: number; opacity: number }
+  | { type: "glow"; color: string; spread: number; strength: number; /** Optional for saved glows made before Blur was added. */ blur?: number }
   | { type: "outline"; color: string; thickness: number }
   | { type: "echo"; color: string; distance: number; angle: number }
   | { type: "background"; color: string; spread: number; roundness: number; opacity: number }
@@ -45,6 +46,8 @@ export function defaultTextEffect(type: Exclude<TextEffect["type"], "none">): Te
   switch (type) {
     case "shadow":
       return { type: "shadow", color: "#000000", distance: 8, angle: 45, blur: 12, opacity: 0.6 };
+    case "glow":
+      return { type: "glow", color: "#ffe600", spread: 16, blur: 20, strength: 70 };
     case "outline":
       return { type: "outline", color: "#ffffff", thickness: 4 };
     case "echo":

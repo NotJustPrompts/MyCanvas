@@ -231,6 +231,20 @@
   color: var(--accent);
 }
 
+.context-properties-button {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: transparent;
+  border-color: transparent;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.context-properties-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .size-stepper {
   display: flex;
   align-items: center;
@@ -291,6 +305,11 @@ input.context-color::-moz-color-swatch {
 
 .editor-left .panel-section {
   margin-bottom: 22px;
+}
+
+.left-text-properties.locked {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 /* Tool tiles */
@@ -481,6 +500,14 @@ input.context-color::-moz-color-swatch {
   background: var(--accent-soft);
   box-shadow: inset 2px 0 0 var(--accent);
 }
+
+.layer-row[draggable="true"],
+.layer-group[draggable="true"] > .group-header {
+  cursor: grab;
+}
+
+.layer-row.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
+.layer-row.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
 
 .layer-type {
   font-size: 10px;
@@ -792,6 +819,10 @@ input.context-color::-moz-color-swatch {
   text-shadow: 2px 2px 3px color-mix(in srgb, var(--text) 45%, transparent);
 }
 
+.effect-glyph.effect-glow {
+  text-shadow: 0 0 4px #ffe600, 0 0 9px #ffe600;
+}
+
 .effect-glyph.effect-outline {
   color: transparent;
   -webkit-text-stroke: 1.2px var(--text);
@@ -978,6 +1009,8 @@ input.bg-color {
   left: calc(100% - 4px);
   top: -5px;
   min-width: 130px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
