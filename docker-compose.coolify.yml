@@ -3,6 +3,8 @@
 # route in ops/traefik/mycanvas-local.yaml (https://canva.local).
 services:
   mycanvas:
+    # Coolify renames this to mycanvas-<app uuid>, a stable name for the route.
+    container_name: mycanvas
     init: true
     restart: unless-stopped
     build:

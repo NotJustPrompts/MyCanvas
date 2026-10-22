@@ -1,0 +1,41 @@
+# MyCanvas local HTTPS, installed on nmd-srvr at
+# /data/coolify/proxy/dynamic/mycanvas-local.yaml. It does not change other
+# Coolify routes. canva.local has no public DNS: the Mac maps it to the
+# server in /etc/hosts and trusts the self-signed cert in its keychain.
+# HTTPS is required: WebGPU, the model cache and local font access only work
+# in a secure context.
+http:
+  routers:
+    mycanvas-local-http:
+      rule: "Host(`canva.local`)"
+      entryPoints: [http]
+      middlewares: [mycanvas-local-lan, mycanvas-local-https]
+      service: mycanvas-local
+    mycanvas-local-tls:
+      rule: "Host(`canva.local`)"
+      entryPoints: [https]
+      middlewares: [mycanvas-local-lan, mycanvas-local-headers]
+      service: mycanvas-local
+      tls: {}
+  services:
+    mycanvas-local:
+      loadBalancer:
+        servers:
+          - url: "http://mycanvas-a5vahgg73azwpr4geonrndto:3001"
+  middlewares:
+    mycanvas-local-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    mycanvas-local-lan:
+      ipAllowList:
+        sourceRange: ["192.168.0.0/24", "127.0.0.1/32", "::1/128"]
+    mycanvas-local-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        referrerPolicy: same-origin
+tls:
+  certificates:
+    - certFile: /traefik/certs/canva.local/cert.pem
+      keyFile: /traefik/certs/canva.local/key.pem
